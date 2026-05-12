@@ -17,15 +17,68 @@ The goal is to keep the good parts of explicit workflows and named states, while
 
 The first version currently includes:
 
-- a small runtime for creating flows from typed context and event schemas
+- a small runtime for creating flows from typed context schemas and step-local events
 - named steps with typed event handlers
 - context updates through explicit `update(...)`
-- state transitions through explicit `goto(...)`
+- state transitions through explicit `goto(...)` with typed `states.*` refs
 - async effects with pending-effect tracking
 - delayed transitions via `schedule(...)`
 - subscriptions and snapshots for UI integration
 
 This is intentionally narrow. It is a proof of concept for the authoring model, not a complete replacement for advanced statechart features.
+
+## API Shape
+
+Flows define shared context and the list of state names up front. Events are declared inside the step that handles them.
+
+```ts
+import { createFlow } from 'logic-flow';
+import { z } from 'zod';
+
+const publishingFlow = createFlow({
+  name: 'publishing-demo',
+  context: z.object({
+    title: z.string(),
+    requiresLegalReview: z.boolean(),
+    published: z.boolean(),
+    error: z.string().optional(),
+  }),
+  states: ['draft', 'review', 'publishing', 'published'] as const,
+  initial: 'draft',
+  initialContext: {
+    title: 'New workflow runtime',
+    requiresLegalReview: true,
+    published: false,
+  },
+})
+  .step('draft', ({ on, states }) => [
+    on('CHANGE_TITLE', { value: z.string() }, ({ event, update }) => {
+      update({ title: event.value, error: undefined, published: false });
+    }),
+    on('SUBMIT', {}, ({ ctx, goto, update }) => {
+      if (ctx.title.trim().length < 6) {
+        update({ error: 'Title must be at least 6 characters.' });
+        return;
+      }
+
+      goto(ctx.requiresLegalReview ? states.review : states.publishing);
+    }),
+  ])
+  .step('review', ({ on, states }) => [
+    on('APPROVE', {}, ({ goto }) => {
+      goto(states.publishing);
+    }),
+  ])
+  .build();
+```
+
+What this buys you:
+
+- the event name and the runtime `type` literal are always the same source of truth
+- each step declares only the events it can handle
+- handler `event` payloads are inferred from the local shape passed to `on(...)`
+- transitions can target `states.review` or `states.publishing` instead of repeating raw strings
+- the built flow exposes the full inferred event union to `dispatch(...)`
 
 ## Workspace
 
