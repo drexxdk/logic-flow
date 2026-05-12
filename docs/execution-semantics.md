@@ -2,6 +2,8 @@
 
 This document describes the runtime rules that matter when writing `logic-flow` handlers and `enter(...)` hooks.
 
+The examples here assume the supported array-returning step registration form, for example `.step('idle', ({ on }) => [on(...)])`. That shape is not just stylistic in the current implementation; it is how `logic-flow` preserves the inferred event union exposed through external `dispatch(...)` and `send(...)`.
+
 ## Two Kinds Of Control Flow
 
 `logic-flow` exposes two different primitives for changing what happens next:

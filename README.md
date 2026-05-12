@@ -32,6 +32,21 @@ This is intentionally narrow. It is a proof of concept for the authoring model, 
 
 Flows define shared context and the list of state names up front. Events are declared inside the step that handles them, and you can optionally declare transition targets up front for stronger editor help.
 
+The supported step authoring form is the array-returning registration style:
+
+```ts
+.step('draft', ({ on, enter, states }) => [
+  on('SUBMIT', {}, [states.review, states.publishing], ({ ctx, goto }) => {
+    goto(ctx.requiresLegalReview ? states.review : states.publishing);
+  }),
+  enter(({ update }) => {
+    update({ published: false });
+  }),
+])
+```
+
+This is deliberate. A more imperative `step(..., () => { on(...); })` form was prototyped, but it weakens TypeScript inference for external `dispatch(...)` and `send(...)` in the current design. `logic-flow` currently prefers the more explicit authoring contract over a shorter syntax that loses type information.
+
 For the runtime rules around `goto(...)`, `dispatch(...)`, terminal execution, and `try/catch`, see [docs/execution-semantics.md](docs/execution-semantics.md).
 
 ```ts
@@ -83,6 +98,8 @@ What this buys you:
 - transitions can target `states.review` or `states.publishing` instead of repeating raw strings
 - optional `targets` metadata narrows `goto(...)` to the declared destinations and is exposed on `flow.transitions`
 - the built flow exposes the full inferred event union to `dispatch(...)`
+
+The array-returning step shape is part of that inference story today.
 
 When you want to immediately run the initial enter lifecycle, you can create an instance with:
 

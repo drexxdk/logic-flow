@@ -755,6 +755,18 @@
 			],
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "logic-flow build docs sync",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
 		}
 	]
 }
