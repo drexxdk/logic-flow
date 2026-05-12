@@ -473,6 +473,32 @@
 			"problemMatcher": [
 				"$tsc"
 			]
+		},
+		{
+			"label": "logic-flow build export audit",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "demo typecheck export audit",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
 		}
 	]
 }

@@ -1,16 +1,8 @@
 export {
   createFlow,
   FlowInstance,
-  type Awaitable,
-  type FlowContextPatch,
   type FlowDefinition,
   type FlowEvent,
-  type FlowEventUnion,
   type FlowInstanceOptions,
   type FlowSnapshot,
-  type FlowStateNames,
-  type FlowStateRefs,
-  type FlowTransitionDescriptor,
-  type FlowTransitionOptions,
-  type FlowTransitionTargets,
 } from './createFlow';
