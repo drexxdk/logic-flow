@@ -14,4 +14,7 @@ export {
   type FlowSnapshot,
   type FlowStateNames,
   type FlowStateRefs,
+  type FlowTransitionDescriptor,
+  type FlowTransitionOptions,
+  type FlowTransitionTargets,
 } from './createFlow';

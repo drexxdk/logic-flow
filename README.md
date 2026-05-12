@@ -29,7 +29,7 @@ This is intentionally narrow. It is a proof of concept for the authoring model, 
 
 ## API Shape
 
-Flows define shared context and the list of state names up front. Events are declared inside the step that handles them.
+Flows define shared context and the list of state names up front. Events are declared inside the step that handles them, and you can optionally declare transition targets up front for stronger editor help.
 
 ```ts
 import { createFlow } from 'logic-flow';
@@ -55,14 +55,19 @@ const publishingFlow = createFlow({
     on('CHANGE_TITLE', { value: z.string() }, ({ event, update }) => {
       update({ title: event.value, error: undefined, published: false });
     }),
-    on('SUBMIT', {}, ({ ctx, goto, update }) => {
-      if (ctx.title.trim().length < 6) {
-        update({ error: 'Title must be at least 6 characters.' });
-        return;
-      }
+    on(
+      'SUBMIT',
+      {},
+      { targets: [states.review, states.publishing] as const },
+      ({ ctx, goto, update }) => {
+        if (ctx.title.trim().length < 6) {
+          update({ error: 'Title must be at least 6 characters.' });
+          return;
+        }
 
-      goto(ctx.requiresLegalReview ? states.review : states.publishing);
-    }),
+        goto(ctx.requiresLegalReview ? states.review : states.publishing);
+      },
+    ),
   ])
   .step('review', ({ on, states }) => [
     on('APPROVE', {}, ({ goto }) => {
@@ -78,6 +83,7 @@ What this buys you:
 - each step declares only the events it can handle
 - handler `event` payloads are inferred from the local shape passed to `on(...)`
 - transitions can target `states.review` or `states.publishing` instead of repeating raw strings
+- optional `targets` metadata narrows `goto(...)` to the declared destinations and is exposed on `flow.transitions`
 - the built flow exposes the full inferred event union to `dispatch(...)`
 
 ## Workspace

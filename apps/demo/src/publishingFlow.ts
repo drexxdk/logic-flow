@@ -28,22 +28,27 @@ export const publishingFlow = createFlow({
       update({ requiresLegalReview: !ctx.requiresLegalReview });
     }),
 
-    on('SUBMIT', {}, ({ ctx, goto, update }) => {
-      if (ctx.title.trim().length < 6) {
-        update({ error: 'Title must be at least 6 characters.' });
-        return;
-      }
+    on(
+      'SUBMIT',
+      {},
+      { targets: [states.review, states.publishing] as const },
+      ({ ctx, goto, update }) => {
+        if (ctx.title.trim().length < 6) {
+          update({ error: 'Title must be at least 6 characters.' });
+          return;
+        }
 
-      if (ctx.requiresLegalReview) {
-        goto(states.review);
-        return;
-      }
+        if (ctx.requiresLegalReview) {
+          goto(states.review);
+          return;
+        }
 
-      goto(states.publishing);
-    }),
+        goto(states.publishing);
+      },
+    ),
   ])
   .step('review', ({ on, states }) => [
-    on('APPROVE', {}, ({ goto }) => {
+    on('APPROVE', {}, { targets: [states.publishing] as const }, ({ goto }) => {
       goto(states.publishing);
     }),
   ])
@@ -59,18 +64,23 @@ export const publishingFlow = createFlow({
       }
     }),
 
-    on('FAILED', { message: z.string() }, ({ event, goto, update }) => {
-      update({ error: event.message });
-      goto(states.draft);
-    }),
+    on(
+      'FAILED',
+      { message: z.string() },
+      { targets: [states.draft] as const },
+      ({ event, goto, update }) => {
+        update({ error: event.message });
+        goto(states.draft);
+      },
+    ),
 
-    on('PUBLISHED', {}, ({ goto, update }) => {
+    on('PUBLISHED', {}, { targets: [states.published] as const }, ({ goto, update }) => {
       update({ published: true, error: undefined });
       goto(states.published);
     }),
   ])
   .step('published', ({ enter, states }) => [
-    enter(({ schedule }) => {
+    enter({ targets: [states.draft] as const }, ({ schedule }) => {
       schedule(1500, ({ goto, update }) => {
         update({ published: false });
         goto(states.draft);

@@ -8,6 +8,20 @@ export type FlowContextPatch<TContext> =
 export type FlowEventUnion<TEvent extends FlowEvent> = TEvent;
 export type FlowStateNames<TStates extends readonly string[]> = TStates[number];
 export type FlowStateRefs<TState extends string> = { readonly [K in TState]: K };
+export type FlowTransitionTargets<TState extends string> = readonly TState[];
+
+export interface FlowTransitionOptions<
+  TState extends string,
+  TTargets extends FlowTransitionTargets<TState>,
+> {
+  readonly targets: TTargets;
+}
+
+export interface FlowTransitionDescriptor<TState extends string> {
+  readonly kind: 'enter' | 'event';
+  readonly event?: string;
+  readonly targets: readonly TState[];
+}
 
 export interface FlowSnapshot<TContext, TState extends string, TEvent extends FlowEvent> {
   state: TState;
@@ -16,17 +30,22 @@ export interface FlowSnapshot<TContext, TState extends string, TEvent extends Fl
   pendingEffects: string[];
 }
 
-export interface FlowApi<TContext, TAllEvents extends FlowEvent, TState extends string> {
+export interface FlowApi<
+  TContext,
+  TAllEvents extends FlowEvent,
+  TState extends string,
+  TGotoState extends TState = TState,
+> {
   readonly ctx: TContext;
   readonly state: TState;
   readonly states: FlowStateRefs<TState>;
   update(patch: FlowContextPatch<TContext>): TContext;
-  goto(state: TState): void;
+  goto(state: TGotoState): void;
   dispatch<TEvent extends FlowEvent>(event: TEvent): Promise<void>;
   effect<TResult>(name: string, task: () => Awaitable<TResult>): Promise<TResult>;
   schedule(
     ms: number,
-    task: (api: FlowEnterApi<TContext, TAllEvents, TState>) => Awaitable<void>,
+    task: (api: FlowEnterApi<TContext, TAllEvents, TState, TGotoState>) => Awaitable<void>,
   ): () => void;
   getSnapshot(): FlowSnapshot<TContext, TState, TAllEvents>;
 }
@@ -36,7 +55,8 @@ export interface FlowHandlerApi<
   TAllEvents extends FlowEvent,
   TState extends string,
   TEvent,
-> extends FlowApi<TContext, TAllEvents, TState> {
+  TGotoState extends TState = TState,
+> extends FlowApi<TContext, TAllEvents, TState, TGotoState> {
   readonly event: TEvent;
 }
 
@@ -44,17 +64,25 @@ export interface FlowEnterApi<
   TContext,
   TAllEvents extends FlowEvent,
   TState extends string,
-> extends FlowApi<TContext, TAllEvents, TState> {
+  TGotoState extends TState = TState,
+> extends FlowApi<TContext, TAllEvents, TState, TGotoState> {
   readonly event: TAllEvents | undefined;
 }
 
-export type FlowHandler<TContext, TAllEvents extends FlowEvent, TState extends string, TEvent> = (
-  api: FlowHandlerApi<TContext, TAllEvents, TState, TEvent>,
-) => Awaitable<void>;
+export type FlowHandler<
+  TContext,
+  TAllEvents extends FlowEvent,
+  TState extends string,
+  TEvent,
+  TGotoState extends TState = TState,
+> = (api: FlowHandlerApi<TContext, TAllEvents, TState, TEvent, TGotoState>) => Awaitable<void>;
 
-export type FlowEnterHandler<TContext, TEvent extends FlowEvent, TState extends string> = (
-  api: FlowEnterApi<TContext, TEvent, TState>,
-) => Awaitable<void>;
+export type FlowEnterHandler<
+  TContext,
+  TEvent extends FlowEvent,
+  TState extends string,
+  TGotoState extends TState = TState,
+> = (api: FlowEnterApi<TContext, TEvent, TState, TGotoState>) => Awaitable<void>;
 
 type EventShape = z.ZodRawShape;
 
@@ -63,28 +91,30 @@ type EventFromShape<TType extends string, TShape extends EventShape> = {
 } & z.infer<z.ZodObject<TShape>>;
 
 interface EventRegistration<
-  TContext,
   TState extends string,
   TType extends string,
   TShape extends EventShape,
+  TTargets extends FlowTransitionTargets<TState>,
 > {
   kind: 'event';
   type: TType;
   schema: z.ZodObject<{ type: z.ZodLiteral<TType> } & TShape>;
+  targets: TTargets;
   handler: unknown;
 }
 
-interface EnterRegistration<TContext, TState extends string> {
+interface EnterRegistration<TState extends string, TTargets extends FlowTransitionTargets<TState>> {
   kind: 'enter';
+  targets: TTargets;
   handler: unknown;
 }
 
-type StepRegistration<TContext, TState extends string> =
-  | EventRegistration<TContext, TState, string, EventShape>
-  | EnterRegistration<TContext, TState>;
+type StepRegistration<TState extends string> =
+  | EventRegistration<TState, string, EventShape, FlowTransitionTargets<TState>>
+  | EnterRegistration<TState, FlowTransitionTargets<TState>>;
 
 type StepEvent<TRegistration> =
-  TRegistration extends EventRegistration<any, any, infer TType, infer TShape>
+  TRegistration extends EventRegistration<string, infer TType, infer TShape, readonly string[]>
     ? EventFromShape<TType, TShape>
     : never;
 
@@ -93,6 +123,7 @@ type StepEvents<TRegistrations extends readonly unknown[]> = StepEvent<TRegistra
 interface IStepDefinition<TContext, TAllEvents extends FlowEvent, TState extends string> {
   handlers: Partial<Record<string, FlowHandler<TContext, TAllEvents, TState, FlowEvent>>>;
   enterHandlers: Array<FlowEnterHandler<TContext, TAllEvents, TState>>;
+  transitions: readonly FlowTransitionDescriptor<TState>[];
 }
 
 interface ITransitionRef<TState extends string> {
@@ -121,16 +152,37 @@ interface IStepRegistrar<TContext, TAllEvents extends FlowEvent, TState extends 
       TState,
       EventFromShape<TType, TShape>
     >,
-  ): EventRegistration<TContext, TState, TType, TShape>;
+  ): EventRegistration<TState, TType, TShape, readonly TState[]>;
+  on<
+    const TType extends string,
+    TShape extends EventShape,
+    const TTargets extends readonly TState[],
+  >(
+    type: TType,
+    shape: TShape,
+    options: FlowTransitionOptions<TState, TTargets>,
+    handler: FlowHandler<
+      TContext,
+      TAllEvents | EventFromShape<TType, TShape>,
+      TState,
+      EventFromShape<TType, TShape>,
+      TTargets[number]
+    >,
+  ): EventRegistration<TState, TType, TShape, TTargets>;
   enter(
     handler: FlowEnterHandler<TContext, TAllEvents, TState>,
-  ): EnterRegistration<TContext, TState>;
+  ): EnterRegistration<TState, readonly TState[]>;
+  enter<const TTargets extends readonly TState[]>(
+    options: FlowTransitionOptions<TState, TTargets>,
+    handler: FlowEnterHandler<TContext, TAllEvents, TState, TTargets[number]>,
+  ): EnterRegistration<TState, TTargets>;
 }
 
 export interface FlowDefinition<TContext, TEvent extends FlowEvent, TState extends string> {
   readonly name: string;
   readonly initial: TState;
   readonly initialContext: TContext;
+  readonly transitions: Readonly<Record<TState, readonly FlowTransitionDescriptor<TState>[]>>;
   createInstance(): FlowInstance<TContext, TEvent, TState>;
 }
 
@@ -153,6 +205,9 @@ class InternalFlowDefinition<
   TContextSchema extends z.ZodTypeAny,
 > implements IFlowDefinitionRuntime<TContext, TEvent, TState> {
   public readonly initialContext: TContext;
+  public readonly transitions: Readonly<
+    Record<TState, readonly FlowTransitionDescriptor<TState>[]>
+  >;
 
   public constructor(
     public readonly name: string,
@@ -161,8 +216,10 @@ class InternalFlowDefinition<
     private readonly eventSchemas: ReadonlyMap<string, z.ZodType<FlowEvent>>,
     private readonly stateRefs: FlowStateRefs<TState>,
     private readonly steps: Map<TState, IStepDefinition<TContext, TEvent, TState>>,
+    transitions: Readonly<Record<TState, readonly FlowTransitionDescriptor<TState>[]>>,
     initialContext: TContext,
   ) {
+    this.transitions = transitions;
     this.initialContext = this.validateContext(initialContext);
   }
 
@@ -468,12 +525,7 @@ interface FlowBuilder<
   TStates extends readonly [string, ...string[]],
   TAllEvents extends FlowEvent,
 > {
-  step<
-    TRegistrations extends readonly StepRegistration<
-      z.infer<TContextSchema>,
-      FlowStateNames<TStates>
-    >[],
-  >(
+  step<TRegistrations extends readonly StepRegistration<FlowStateNames<TStates>>[]>(
     name: FlowStateNames<TStates>,
     register: (
       api: IStepRegistrar<z.infer<TContextSchema>, TAllEvents, FlowStateNames<TStates>>,
@@ -498,6 +550,12 @@ function createEventSchema<const TType extends string, TShape extends EventShape
   } as { type: z.ZodLiteral<TType> } & TShape);
 }
 
+function normalizeTargets<TState extends string>(
+  options?: FlowTransitionOptions<TState, readonly TState[]>,
+): readonly TState[] {
+  return options?.targets ?? [];
+}
+
 export function createFlow<
   TContextSchema extends z.ZodTypeAny,
   const TStates extends readonly [string, ...string[]],
@@ -514,31 +572,42 @@ export function createFlow<
     TStates,
     TAllEvents
   > => ({
-    step<TRegistrations extends readonly StepRegistration<TContext, TState>[]>(
+    step<TRegistrations extends readonly StepRegistration<TState>[]>(
       name: TState,
       register: (api: IStepRegistrar<TContext, TAllEvents, TState>) => TRegistrations,
     ) {
       const definition: IStepDefinition<TContext, FlowEvent, TState> = {
         handlers: {},
         enterHandlers: [],
+        transitions: [],
       };
 
       const registrar: IStepRegistrar<TContext, TAllEvents, TState> = {
         states: stateRefs,
-        on(type, shape, handler) {
+        on: ((type, shape, optionsOrHandler, maybeHandler) => {
+          const hasOptions = typeof maybeHandler === 'function';
+          const options = hasOptions ? optionsOrHandler : undefined;
+          const handler = hasOptions ? maybeHandler : optionsOrHandler;
+
           return {
             kind: 'event',
             type,
             schema: createEventSchema(type, shape),
+            targets: normalizeTargets(options as FlowTransitionOptions<TState, readonly TState[]>),
             handler,
-          } as EventRegistration<TContext, TState, typeof type, typeof shape>;
-        },
-        enter(handler) {
+          } as EventRegistration<TState, typeof type, typeof shape, readonly TState[]>;
+        }) as IStepRegistrar<TContext, TAllEvents, TState>['on'],
+        enter: ((optionsOrHandler, maybeHandler) => {
+          const hasOptions = typeof maybeHandler === 'function';
+          const options = hasOptions ? optionsOrHandler : undefined;
+          const handler = hasOptions ? maybeHandler : optionsOrHandler;
+
           return {
             kind: 'enter',
+            targets: normalizeTargets(options as FlowTransitionOptions<TState, readonly TState[]>),
             handler,
           };
-        },
+        }) as IStepRegistrar<TContext, TAllEvents, TState>['enter'],
       };
 
       const registrations = register(registrar);
@@ -548,6 +617,15 @@ export function createFlow<
           definition.enterHandlers.push(
             registration.handler as FlowEnterHandler<TContext, FlowEvent, TState>,
           );
+          if (registration.targets.length > 0) {
+            definition.transitions = [
+              ...definition.transitions,
+              {
+                kind: 'enter',
+                targets: registration.targets,
+              },
+            ];
+          }
           continue;
         }
 
@@ -557,6 +635,17 @@ export function createFlow<
           TState,
           FlowEvent
         >;
+
+        if (registration.targets.length > 0) {
+          definition.transitions = [
+            ...definition.transitions,
+            {
+              kind: 'event',
+              event: registration.type,
+              targets: registration.targets,
+            },
+          ];
+        }
 
         if (!eventSchemas.has(registration.type)) {
           eventSchemas.set(registration.type, registration.schema as z.ZodType<FlowEvent>);
@@ -571,6 +660,12 @@ export function createFlow<
         throw new Error(`Initial state "${config.initial}" must be defined before build().`);
       }
 
+      const transitions = Object.freeze(
+        Object.fromEntries(
+          config.states.map((state) => [state, Object.freeze(steps.get(state)?.transitions ?? [])]),
+        ) as Record<TState, readonly FlowTransitionDescriptor<TState>[]>,
+      );
+
       return new InternalFlowDefinition<TContext, TAllEvents, TState, TContextSchema>(
         config.name,
         config.initial,
@@ -578,6 +673,7 @@ export function createFlow<
         eventSchemas,
         stateRefs,
         steps as Map<TState, IStepDefinition<TContext, TAllEvents, TState>>,
+        transitions,
         config.initialContext,
       );
     },

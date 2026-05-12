@@ -137,4 +137,37 @@ describe('createFlow', () => {
 
     vi.useRealTimers();
   });
+
+  it('exposes declared transition targets for editor help', () => {
+    const flow = createFlow({
+      name: 'transition-help',
+      context: z.object({ approved: z.boolean() }),
+      states: ['draft', 'review', 'published'] as const,
+      initial: 'draft',
+      initialContext: { approved: false },
+    })
+      .step('draft', ({ on, states }) => [
+        on(
+          'SUBMIT',
+          {},
+          { targets: [states.review, states.published] as const },
+          ({ ctx, goto }) => {
+            goto(ctx.approved ? states.published : states.review);
+          },
+        ),
+      ])
+      .step('review', ({ enter, states }) => [
+        enter({ targets: [states.published] as const }, ({ goto }) => {
+          goto(states.published);
+        }),
+      ])
+      .step('published', () => [])
+      .build();
+
+    expect(flow.transitions).toEqual({
+      draft: [{ kind: 'event', event: 'SUBMIT', targets: ['review', 'published'] }],
+      review: [{ kind: 'enter', targets: ['published'] }],
+      published: [],
+    });
+  });
 });
