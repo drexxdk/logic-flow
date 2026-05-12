@@ -420,6 +420,59 @@
 			"problemMatcher": [
 				"$tsc"
 			]
+		},
+		{
+			"label": "demo typecheck flowdefinition",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "demo typecheck send direct",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "logic-flow build export audit",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"build"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "demo typecheck export audit",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
 		}
 	]
 }
