@@ -12,15 +12,23 @@ const terminalGotoRule = {
   create(context) {
     return {
       ExpressionStatement(node) {
-        if (node.expression.type !== 'CallExpression') {
+        const terminalCall =
+          node.expression.type === 'CallExpression'
+            ? node.expression
+            : node.expression.type === 'AwaitExpression' &&
+                node.expression.argument.type === 'CallExpression'
+              ? node.expression.argument
+              : undefined;
+
+        if (!terminalCall) {
           return;
         }
 
-        if (node.expression.callee.type !== 'Identifier') {
+        if (terminalCall.callee.type !== 'Identifier') {
           return;
         }
 
-        if (node.expression.callee.name !== 'goto') {
+        if (terminalCall.callee.name !== 'goto' && terminalCall.callee.name !== 'dispatch') {
           return;
         }
 

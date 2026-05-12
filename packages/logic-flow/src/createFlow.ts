@@ -130,6 +130,16 @@ class FlowTransitionSignal<TState extends string> {
   public constructor(public readonly nextState: TState) {}
 }
 
+class FlowExecutionTerminatedError extends Error {
+  public constructor(reason: 'dispatch') {
+    super(`The current flow execution already ended after ${reason}(...).`);
+  }
+}
+
+interface IExecutionContext {
+  active: boolean;
+}
+
 interface ICreateFlowConfig<
   TContextSchema extends z.ZodTypeAny,
   TStates extends readonly [string, ...string[]],
@@ -411,6 +421,13 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   private createApiBase(event: TEvent | undefined): FlowApi<TContext, TEvent, TState> {
     const readSnapshot = () => this.snapshot;
     const stateRefs = this.definition.getStates();
+    const execution: IExecutionContext = { active: true };
+
+    const assertActive = () => {
+      if (!execution.active) {
+        throw new FlowExecutionTerminatedError('dispatch');
+      }
+    };
 
     return {
       get ctx() {
@@ -420,22 +437,40 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
         return readSnapshot().state;
       },
       states: stateRefs,
-      update: (patch: FlowContextPatch<TContext>) => this.applyUpdate(patch),
+      update: (patch: FlowContextPatch<TContext>) => {
+        assertActive();
+        return this.applyUpdate(patch);
+      },
       goto: (state: TState) => {
+        assertActive();
+        execution.active = false;
+
         if (!this.definition.isKnownState(state)) {
           throw new Error(`Unknown state "${state}" in flow "${this.definition.name}".`);
         }
 
         throw new FlowTransitionSignal(state);
       },
-      dispatch: <TDispatchedEvent extends FlowEvent>(nextEvent: TDispatchedEvent) =>
-        this.dispatch(nextEvent),
-      effect: <TResult>(name: string, task: () => Awaitable<TResult>) => this.runEffect(name, task),
+      dispatch: <TDispatchedEvent extends FlowEvent>(nextEvent: TDispatchedEvent) => {
+        assertActive();
+        execution.active = false;
+        return this.dispatch(nextEvent);
+      },
+      effect: <TResult>(name: string, task: () => Awaitable<TResult>) => {
+        assertActive();
+        return this.runEffect(name, task);
+      },
       schedule: (
         ms: number,
         task: (api: FlowEnterApi<TContext, TEvent, TState>) => Awaitable<void>,
-      ) => this.scheduleTask(ms, task, event),
-      getSnapshot: () => this.snapshot,
+      ) => {
+        assertActive();
+        return this.scheduleTask(ms, task, event);
+      },
+      getSnapshot: () => {
+        assertActive();
+        return this.snapshot;
+      },
     };
   }
 

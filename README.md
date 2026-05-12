@@ -31,6 +31,8 @@ This is intentionally narrow. It is a proof of concept for the authoring model, 
 
 Flows define shared context and the list of state names up front. Events are declared inside the step that handles them, and you can optionally declare transition targets up front for stronger editor help.
 
+For the runtime rules around `goto(...)`, `dispatch(...)`, terminal execution, and `try/catch`, see [docs/execution-semantics.md](docs/execution-semantics.md).
+
 ```ts
 import { createFlow } from 'logic-flow';
 import { z } from 'zod';
@@ -100,6 +102,7 @@ The npm package contains the runtime and public API.
 - `src/createFlow.ts`: core runtime and builder API
 - `src/index.ts`: package entrypoint
 - `test/createFlow.test.ts`: focused runtime tests
+- `docs/execution-semantics.md`: behavior and control-flow rules for handlers and enter hooks
 
 ### `apps/demo`
 

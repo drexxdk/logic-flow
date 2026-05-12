@@ -170,6 +170,33 @@ describe('createFlow', () => {
     expect(instance.getSnapshot().state).toBe('success');
   });
 
+  it('prevents further flow api calls after an internal dispatch', async () => {
+    const flow = createFlow({
+      name: 'dispatch-terminal',
+      context: z.object({ failed: z.boolean() }),
+      states: ['idle', 'done'] as const,
+      initial: 'idle',
+      initialContext: { failed: false },
+    })
+      .step('idle', ({ enter, on, states }) => [
+        enter(async ({ dispatch }) => {
+          await dispatch({ type: 'FINISH' });
+          await dispatch({ type: 'FINISH' });
+        }),
+        on('FINISH', {}, { targets: [states.done] as const }, ({ goto }) => {
+          goto(states.done);
+        }),
+      ])
+      .step('done', () => [])
+      .build();
+
+    const instance = flow.createInstance();
+
+    await expect(instance.start()).rejects.toThrow(
+      'The current flow execution already ended after dispatch(...).',
+    );
+  });
+
   it('exposes declared transition targets for editor help', () => {
     const flow = createFlow({
       name: 'transition-help',
