@@ -276,7 +276,10 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   >();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly queue: TEvent[] = [];
+  private isDestroyed = false;
+  private hasStarted = false;
   private isProcessing = false;
+  private startPromise: Promise<FlowSnapshot<TContext, TState, TEvent>> | undefined;
   private snapshot: FlowSnapshot<TContext, TState, TEvent>;
 
   public constructor(
@@ -296,6 +299,10 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   public subscribe(
     listener: (snapshot: FlowSnapshot<TContext, TState, TEvent>) => void,
   ): () => void {
+    if (this.isDestroyed) {
+      return () => {};
+    }
+
     this.listeners.add(listener);
     listener(this.snapshot);
 
@@ -305,13 +312,40 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   }
 
   public async start(): Promise<FlowSnapshot<TContext, TState, TEvent>> {
-    await this.runEnterHandlers(undefined);
-    return this.snapshot;
+    if (this.isDestroyed) {
+      return this.snapshot;
+    }
+
+    if (this.hasStarted) {
+      return this.snapshot;
+    }
+
+    if (this.startPromise) {
+      return this.startPromise;
+    }
+
+    this.startPromise = (async () => {
+      await this.runEnterHandlers(undefined);
+      this.hasStarted = true;
+      return this.snapshot;
+    })();
+
+    try {
+      return await this.startPromise;
+    } finally {
+      if (!this.hasStarted) {
+        this.startPromise = undefined;
+      }
+    }
   }
 
   public async dispatch<TDispatchedEvent extends FlowEvent>(
     event: TDispatchedEvent,
   ): Promise<void> {
+    if (this.isDestroyed) {
+      return;
+    }
+
     this.queue.push(this.definition.validateEvent(event));
 
     if (this.isProcessing) {
@@ -321,7 +355,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     this.isProcessing = true;
 
     try {
-      while (this.queue.length > 0) {
+      while (!this.isDestroyed && this.queue.length > 0) {
         const nextEvent = this.queue.shift();
 
         if (nextEvent) {
@@ -334,11 +368,25 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   }
 
   public destroy(): void {
+    if (this.isDestroyed) {
+      return;
+    }
+
+    this.isDestroyed = true;
+    this.queue.length = 0;
     this.clearTimers();
+    this.snapshot = {
+      ...this.snapshot,
+      pendingEffects: [],
+    };
     this.listeners.clear();
   }
 
   private notify(): void {
+    if (this.isDestroyed) {
+      return;
+    }
+
     this.listeners.forEach((listener) => listener(this.snapshot));
   }
 
@@ -348,6 +396,10 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   }
 
   private applyUpdate(patch: FlowContextPatch<TContext>): TContext {
+    if (this.isDestroyed) {
+      return this.snapshot.context;
+    }
+
     const partial = typeof patch === 'function' ? patch(this.snapshot.context) : patch;
     const nextContext = this.definition.validateContext({
       ...this.snapshot.context,
@@ -364,6 +416,10 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   }
 
   private async runEffect<TResult>(name: string, task: () => Awaitable<TResult>): Promise<TResult> {
+    if (this.isDestroyed) {
+      return undefined as TResult;
+    }
+
     this.snapshot = {
       ...this.snapshot,
       pendingEffects: [...this.snapshot.pendingEffects, name],
@@ -380,11 +436,13 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
         nextPendingEffects.splice(effectIndex, 1);
       }
 
-      this.snapshot = {
-        ...this.snapshot,
-        pendingEffects: nextPendingEffects,
-      };
-      this.notify();
+      if (!this.isDestroyed) {
+        this.snapshot = {
+          ...this.snapshot,
+          pendingEffects: nextPendingEffects,
+        };
+        this.notify();
+      }
     }
   }
 
@@ -393,9 +451,16 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     task: (api: FlowEnterApi<TContext, TEvent, TState>) => Awaitable<void>,
     event: TEvent | undefined,
   ): () => void {
+    if (this.isDestroyed) {
+      return () => {};
+    }
+
     const timer = setTimeout(() => {
       this.timers.delete(timer);
-      void this.runScheduledTask(task, event);
+
+      if (!this.isDestroyed) {
+        void this.runScheduledTask(task, event);
+      }
     }, ms);
 
     this.timers.add(timer);
@@ -410,10 +475,14 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     task: (api: FlowEnterApi<TContext, TEvent, TState>) => Awaitable<void>,
     event: TEvent | undefined,
   ): Promise<void> {
+    if (this.isDestroyed) {
+      return;
+    }
+
     const api = this.createEnterApi(event);
     const nextState = await this.captureTransition(task, api);
 
-    if (nextState) {
+    if (!this.isDestroyed && nextState) {
       await this.transitionTo(nextState, event);
     }
   }
@@ -427,6 +496,8 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
       if (!execution.active) {
         throw new FlowExecutionTerminatedError('dispatch');
       }
+
+      return !this.isDestroyed;
     };
 
     return {
@@ -438,11 +509,17 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
       },
       states: stateRefs,
       update: (patch: FlowContextPatch<TContext>) => {
-        assertActive();
+        if (!assertActive()) {
+          return readSnapshot().context;
+        }
+
         return this.applyUpdate(patch);
       },
       goto: (state: TState) => {
-        assertActive();
+        if (!assertActive()) {
+          return undefined as never;
+        }
+
         execution.active = false;
 
         if (!this.definition.isKnownState(state)) {
@@ -452,23 +529,35 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
         throw new FlowTransitionSignal(state);
       },
       dispatch: <TDispatchedEvent extends FlowEvent>(nextEvent: TDispatchedEvent) => {
-        assertActive();
+        if (!assertActive()) {
+          return Promise.resolve();
+        }
+
         execution.active = false;
         return this.dispatch(nextEvent);
       },
       effect: <TResult>(name: string, task: () => Awaitable<TResult>) => {
-        assertActive();
+        if (!assertActive()) {
+          return Promise.resolve(undefined as TResult);
+        }
+
         return this.runEffect(name, task);
       },
       schedule: (
         ms: number,
         task: (api: FlowEnterApi<TContext, TEvent, TState>) => Awaitable<void>,
       ) => {
-        assertActive();
+        if (!assertActive()) {
+          return () => {};
+        }
+
         return this.scheduleTask(ms, task, event);
       },
       getSnapshot: () => {
-        assertActive();
+        if (!assertActive()) {
+          return readSnapshot();
+        }
+
         return this.snapshot;
       },
     };
@@ -515,6 +604,10 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   }
 
   private async handleEvent(event: TEvent): Promise<void> {
+    if (this.isDestroyed) {
+      return;
+    }
+
     this.snapshot = {
       ...this.snapshot,
       lastEvent: event,
@@ -534,12 +627,16 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
       api,
     );
 
-    if (nextState) {
+    if (!this.isDestroyed && nextState) {
       await this.transitionTo(nextState, event);
     }
   }
 
   private async transitionTo(nextState: TState, event: TEvent | undefined): Promise<void> {
+    if (this.isDestroyed) {
+      return;
+    }
+
     this.clearTimers();
     this.snapshot = {
       ...this.snapshot,
@@ -551,11 +648,19 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   }
 
   private async runEnterHandlers(event: TEvent | undefined): Promise<void> {
+    if (this.isDestroyed) {
+      return;
+    }
+
     const step = this.definition.getStep(this.snapshot.state);
 
     for (const enterHandler of step.enterHandlers) {
       const api = this.createEnterApi(event);
       const nextState = await this.captureTransition(enterHandler, api);
+
+      if (this.isDestroyed) {
+        return;
+      }
 
       if (nextState) {
         await this.transitionTo(nextState, event);
@@ -621,6 +726,10 @@ export function createFlow<
       name: TState,
       register: (api: IStepRegistrar<TContext, TAllEvents, TState>) => TRegistrations,
     ) {
+      if (steps.has(name)) {
+        throw new Error(`State "${name}" is already defined in flow "${config.name}".`);
+      }
+
       const definition: IStepDefinition<TContext, FlowEvent, TState> = {
         handlers: {},
         enterHandlers: [],
@@ -674,6 +783,12 @@ export function createFlow<
           continue;
         }
 
+        if (registration.type in definition.handlers) {
+          throw new Error(
+            `Event "${registration.type}" is already defined for state "${name}" in flow "${config.name}".`,
+          );
+        }
+
         definition.handlers[registration.type] = registration.handler as FlowHandler<
           TContext,
           FlowEvent,
@@ -703,6 +818,12 @@ export function createFlow<
     build() {
       if (!steps.has(config.initial)) {
         throw new Error(`Initial state "${config.initial}" must be defined before build().`);
+      }
+
+      for (const state of config.states) {
+        if (!steps.has(state)) {
+          throw new Error(`State "${state}" must be defined before build().`);
+        }
       }
 
       const transitions = Object.freeze(

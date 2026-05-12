@@ -83,6 +83,42 @@ This terminal rule applies to `dispatch(...)` called from the flow API inside ha
 
 It does **not** mean that calling `instance.dispatch(...)` from application code is terminal for your app code. External dispatch is just the public way to send an event into the flow.
 
+## Instance Lifecycle
+
+`FlowInstance` has two important lifecycle boundaries:
+
+- `start()` runs the initial state's `enter(...)` hooks
+- `destroy()` stops the instance from doing further work
+
+### `start()` runs once per instance
+
+Calling `start()` multiple times on the same instance does not replay the initial enter lifecycle.
+
+This keeps instance startup idempotent for UI integrations that may call startup more than once by mistake or through overlapping effects.
+
+### `destroy()` makes the instance inert
+
+After `destroy()`:
+
+- pending timers are cleared
+- pending effect names are removed from the snapshot
+- later external `dispatch(...)` calls are ignored
+- in-flight async completions and scheduled tasks no longer mutate the snapshot
+
+This prevents stale work from updating state after the owning UI or runtime has already disposed the flow instance.
+
+## Scheduled Work Ownership
+
+Scheduled work created by `schedule(...)` belongs to the currently active state execution.
+
+That means scheduled tasks are cleared when:
+
+- the returned cancellation function is called
+- the flow transitions to another state
+- the instance is destroyed
+
+This keeps delayed work scoped to the state that created it, instead of allowing old timers to fire after the flow has already moved on.
+
 ## Transition Metadata
 
 When you know the intended destinations up front, declare them in `targets`.
@@ -118,6 +154,18 @@ enter(async ({ dispatch, effect }) => {
 ```
 
 Be careful with broad `try/catch` around flow control primitives. `goto(...)` ends execution by throwing an internal transition signal, so overly broad catches can interfere with transition handling.
+
+## Error Propagation
+
+Errors thrown by event handlers or `enter(...)` hooks are not swallowed by the runtime.
+
+- a thrown event handler causes the corresponding `instance.dispatch(...)` call to reject
+- a thrown `enter(...)` hook causes `instance.start()` or the triggering transition to reject
+- a rejected `effect(...)` promise rejects the surrounding handler or `enter(...)` hook
+
+The runtime still performs normal `effect(...)` cleanup when an effect rejects, so `pendingEffects` does not stay stuck after a failure.
+
+This means application code should treat `start()` and `dispatch(...)` as async boundaries that may fail, and should catch errors there when the flow author has not handled them inside the workflow itself.
 
 ## Editor Enforcement
 

@@ -1,0 +1,285 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "logic-flow focused tests",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow focused tests rerun",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow typecheck",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"typecheck"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "logic-flow lint",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"lint"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		},
+		{
+			"label": "logic-flow focused tests final",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow lint final",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"lint"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		},
+		{
+			"label": "logic-flow destroy tests",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow destroy tests rerun",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow typecheck teardown",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"typecheck"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "logic-flow lint teardown",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"lint"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		},
+		{
+			"label": "logic-flow start and queue tests",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow start rerun",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow typecheck start",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"typecheck"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "logic-flow lint start",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"lint"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		},
+		{
+			"label": "logic-flow timer tests",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow typecheck timers",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"typecheck"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "logic-flow lint timers",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"lint"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		},
+		{
+			"label": "logic-flow error tests",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow typecheck errors",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"typecheck"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "logic-flow lint errors",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"lint"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		}
+	]
+}

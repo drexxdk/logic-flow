@@ -138,7 +138,7 @@ describe('createFlow', () => {
     vi.useRealTimers();
   });
 
-  it('stops executing the current handler after goto', async () => {
+  it('transitions immediately when goto is called', async () => {
     const order: string[] = [];
 
     const flow = createFlow({
@@ -152,7 +152,6 @@ describe('createFlow', () => {
         on('COMPLETE', {}, { targets: [states.success] as const }, ({ goto }) => {
           order.push('before-goto');
           goto(states.success);
-          order.push('after-goto');
         }),
       ])
       .step('success', ({ enter }) => [
@@ -179,10 +178,9 @@ describe('createFlow', () => {
       initialContext: { failed: false },
     })
       .step('idle', ({ enter, on, states }) => [
-        enter(async ({ dispatch }) => {
-          await dispatch({ type: 'FINISH' });
-          await dispatch({ type: 'FINISH' });
-        }),
+        enter(({ dispatch }) =>
+          dispatch({ type: 'FINISH' }).then(() => dispatch({ type: 'FINISH' })),
+        ),
         on('FINISH', {}, { targets: [states.done] as const }, ({ goto }) => {
           goto(states.done);
         }),
@@ -228,5 +226,357 @@ describe('createFlow', () => {
       review: [{ kind: 'enter', targets: ['published'] }],
       published: [],
     });
+  });
+
+  it('fails build when a declared state has no step definition', () => {
+    expect(() =>
+      createFlow({
+        name: 'missing-step',
+        context: z.object({ ready: z.boolean() }),
+        states: ['idle', 'done'] as const,
+        initial: 'idle',
+        initialContext: { ready: false },
+      })
+        .step('idle', () => [])
+        .build(),
+    ).toThrow('State "done" must be defined before build().');
+  });
+
+  it('fails when the same state is defined more than once', () => {
+    expect(() =>
+      createFlow({
+        name: 'duplicate-step',
+        context: z.object({ ready: z.boolean() }),
+        states: ['idle'] as const,
+        initial: 'idle',
+        initialContext: { ready: false },
+      })
+        .step('idle', () => [])
+        .step('idle', () => [])
+        .build(),
+    ).toThrow('State "idle" is already defined in flow "duplicate-step".');
+  });
+
+  it('fails when the same event is registered twice in one step', () => {
+    expect(() =>
+      createFlow({
+        name: 'duplicate-event',
+        context: z.object({ count: z.number() }),
+        states: ['idle'] as const,
+        initial: 'idle',
+        initialContext: { count: 0 },
+      })
+        .step('idle', ({ on }) => [
+          on('INC', {}, ({ ctx, update }) => {
+            update({ count: ctx.count + 1 });
+          }),
+          on('INC', {}, ({ ctx, update }) => {
+            update({ count: ctx.count + 2 });
+          }),
+        ])
+        .build(),
+    ).toThrow('Event "INC" is already defined for state "idle" in flow "duplicate-event".');
+  });
+
+  it('does not apply async completion updates after destroy', async () => {
+    const deferred = createDeferred<void>();
+
+    const flow = createFlow({
+      name: 'destroy-effect',
+      context: z.object({ saved: z.boolean() }),
+      states: ['idle', 'saving', 'done'] as const,
+      initial: 'idle',
+      initialContext: { saved: false },
+    })
+      .step('idle', ({ on, states }) => [
+        on('SAVE', {}, { targets: [states.saving] as const }, ({ goto }) => {
+          goto(states.saving);
+        }),
+      ])
+      .step('saving', ({ enter, on, states }) => [
+        enter(async ({ effect, dispatch }) => {
+          await effect('persist', () => deferred.promise);
+          await dispatch({ type: 'SAVED' });
+        }),
+        on('SAVED', {}, { targets: [states.done] as const }, ({ goto, update }) => {
+          update({ saved: true });
+          goto(states.done);
+        }),
+      ])
+      .step('done', () => [])
+      .build();
+
+    const instance = flow.createInstance();
+    const dispatchPromise = instance.dispatch({ type: 'SAVE' });
+
+    await Promise.resolve();
+
+    expect(instance.getSnapshot().state).toBe('saving');
+    expect(instance.getSnapshot().pendingEffects).toEqual(['persist']);
+
+    instance.destroy();
+
+    expect(instance.getSnapshot().state).toBe('saving');
+    expect(instance.getSnapshot().pendingEffects).toEqual([]);
+
+    deferred.resolve();
+    await dispatchPromise;
+
+    expect(instance.getSnapshot().state).toBe('saving');
+    expect(instance.getSnapshot().context.saved).toBe(false);
+    expect(instance.getSnapshot().pendingEffects).toEqual([]);
+  });
+
+  it('ignores external dispatch after destroy', async () => {
+    const flow = createFlow({
+      name: 'destroy-dispatch',
+      context: z.object({ count: z.number() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { count: 0 },
+    })
+      .step('idle', ({ on }) => [
+        on('INC', {}, ({ ctx, update }) => {
+          update({ count: ctx.count + 1 });
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+
+    instance.destroy();
+    await instance.dispatch({ type: 'INC' });
+
+    expect(instance.getSnapshot().context.count).toBe(0);
+  });
+
+  it('processes queued external dispatches in order while another event is running', async () => {
+    const firstEventDeferred = createDeferred<void>();
+
+    const flow = createFlow({
+      name: 'queued-dispatch',
+      context: z.object({ count: z.number(), order: z.array(z.string()) }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { count: 0, order: [] },
+    })
+      .step('idle', ({ on }) => [
+        on('FIRST', {}, async ({ ctx, effect, update }) => {
+          update({ order: [...ctx.order, 'first:start'] });
+          await effect('first', () => firstEventDeferred.promise);
+          update((currentContext) => ({
+            count: currentContext.count + 1,
+            order: [...currentContext.order, 'first:end'],
+          }));
+        }),
+        on('SECOND', {}, ({ ctx, update }) => {
+          update({
+            count: ctx.count + 1,
+            order: [...ctx.order, 'second'],
+          });
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+    const firstDispatchPromise = instance.dispatch({ type: 'FIRST' });
+
+    await Promise.resolve();
+
+    const secondDispatchPromise = instance.dispatch({ type: 'SECOND' });
+
+    expect(instance.getSnapshot().context).toEqual({
+      count: 0,
+      order: ['first:start'],
+    });
+
+    firstEventDeferred.resolve();
+    await Promise.all([firstDispatchPromise, secondDispatchPromise]);
+
+    expect(instance.getSnapshot().context).toEqual({
+      count: 2,
+      order: ['first:start', 'first:end', 'second'],
+    });
+  });
+
+  it('does not rerun enter handlers when start is called twice', async () => {
+    const order: string[] = [];
+
+    const flow = createFlow({
+      name: 'start-once',
+      context: z.object({ entered: z.number() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { entered: 0 },
+    })
+      .step('idle', ({ enter }) => [
+        enter(({ ctx, update }) => {
+          order.push('enter');
+          update({ entered: ctx.entered + 1 });
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+
+    await instance.start();
+    await instance.start();
+
+    expect(order).toEqual(['enter']);
+    expect(instance.getSnapshot().context.entered).toBe(1);
+  });
+
+  it('cancels a scheduled task when the returned cleanup function is called', async () => {
+    vi.useFakeTimers();
+
+    const flow = createFlow({
+      name: 'schedule-cancel',
+      context: z.object({ fired: z.boolean() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { fired: false },
+    })
+      .step('idle', ({ enter }) => [
+        enter(({ schedule, update }) => {
+          const cancel = schedule(100, ({ update: delayedUpdate }) => {
+            delayedUpdate({ fired: true });
+          });
+
+          update({ fired: false });
+          cancel();
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+
+    await instance.start();
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(instance.getSnapshot().context.fired).toBe(false);
+
+    vi.useRealTimers();
+  });
+
+  it('clears scheduled tasks when transitioning out of the owning state', async () => {
+    vi.useFakeTimers();
+
+    const flow = createFlow({
+      name: 'schedule-transition-clear',
+      context: z.object({ closedByDelay: z.boolean() }),
+      states: ['idle', 'waiting', 'done'] as const,
+      initial: 'idle',
+      initialContext: { closedByDelay: false },
+    })
+      .step('idle', ({ on, states }) => [
+        on('BEGIN', {}, { targets: [states.waiting] as const }, ({ goto }) => {
+          goto(states.waiting);
+        }),
+      ])
+      .step('waiting', ({ enter, on, states }) => [
+        enter(({ schedule, states: stateRefs }) => {
+          schedule(100, ({ goto, update }) => {
+            update({ closedByDelay: true });
+            goto(stateRefs.done);
+          });
+        }),
+        on('CANCEL', {}, { targets: [states.done] as const }, ({ goto }) => {
+          goto(states.done);
+        }),
+      ])
+      .step('done', () => [])
+      .build();
+
+    const instance = flow.createInstance();
+
+    await instance.dispatch({ type: 'BEGIN' });
+    expect(instance.getSnapshot().state).toBe('waiting');
+
+    await instance.dispatch({ type: 'CANCEL' });
+    expect(instance.getSnapshot().state).toBe('done');
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(instance.getSnapshot().state).toBe('done');
+    expect(instance.getSnapshot().context.closedByDelay).toBe(false);
+
+    vi.useRealTimers();
+  });
+
+  it('rejects dispatch when an event handler throws', async () => {
+    const flow = createFlow({
+      name: 'handler-throws',
+      context: z.object({ count: z.number() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { count: 0 },
+    })
+      .step('idle', ({ on }) => [
+        on('FAIL', {}, () => {
+          throw new Error('handler failed');
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+
+    await expect(instance.dispatch({ type: 'FAIL' })).rejects.toThrow('handler failed');
+    expect(instance.getSnapshot().context.count).toBe(0);
+    expect(instance.getSnapshot().state).toBe('idle');
+    expect(instance.getSnapshot().lastEvent).toEqual({ type: 'FAIL' });
+  });
+
+  it('clears pending effects when an effect rejects during dispatch', async () => {
+    const deferred = createDeferred<void>();
+
+    const flow = createFlow({
+      name: 'effect-rejects',
+      context: z.object({ attempted: z.boolean() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { attempted: false },
+    })
+      .step('idle', ({ on }) => [
+        on('RUN', {}, async ({ effect, update }) => {
+          update({ attempted: true });
+          await effect('persist', () => deferred.promise);
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+    const dispatchPromise = instance.dispatch({ type: 'RUN' });
+
+    await Promise.resolve();
+
+    expect(instance.getSnapshot().pendingEffects).toEqual(['persist']);
+
+    deferred.reject(new Error('persist failed'));
+
+    await expect(dispatchPromise).rejects.toThrow('persist failed');
+    expect(instance.getSnapshot().pendingEffects).toEqual([]);
+    expect(instance.getSnapshot().context.attempted).toBe(true);
+  });
+
+  it('rejects start when an enter handler throws', async () => {
+    const flow = createFlow({
+      name: 'enter-throws',
+      context: z.object({ ready: z.boolean() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { ready: false },
+    })
+      .step('idle', ({ enter }) => [
+        enter(() => {
+          throw new Error('enter failed');
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+
+    await expect(instance.start()).rejects.toThrow('enter failed');
+    expect(instance.getSnapshot().state).toBe('idle');
+    expect(instance.getSnapshot().context.ready).toBe(false);
   });
 });
