@@ -30,6 +30,10 @@ export interface FlowSnapshot<TContext, TState extends string, TEvent extends Fl
   pendingEffects: string[];
 }
 
+export interface FlowInstanceOptions {
+  autoStart?: boolean;
+}
+
 export interface FlowApi<
   TContext,
   TAllEvents extends FlowEvent,
@@ -193,7 +197,7 @@ export interface FlowDefinition<TContext, TEvent extends FlowEvent, TState exten
   readonly initial: TState;
   readonly initialContext: TContext;
   readonly transitions: Readonly<Record<TState, readonly FlowTransitionDescriptor<TState>[]>>;
-  createInstance(): FlowInstance<TContext, TEvent, TState>;
+  createInstance(options?: FlowInstanceOptions): FlowInstance<TContext, TEvent, TState>;
 }
 
 interface IFlowDefinitionRuntime<
@@ -233,8 +237,14 @@ class InternalFlowDefinition<
     this.initialContext = this.validateContext(initialContext);
   }
 
-  public createInstance(): FlowInstance<TContext, TEvent, TState> {
-    return new FlowInstance(this);
+  public createInstance(options?: FlowInstanceOptions): FlowInstance<TContext, TEvent, TState> {
+    const instance = new FlowInstance(this);
+
+    if (options?.autoStart) {
+      void instance.start();
+    }
+
+    return instance;
   }
 
   public getStep(state: TState): IStepDefinition<TContext, TEvent, TState> {
@@ -281,6 +291,9 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   private isProcessing = false;
   private startPromise: Promise<FlowSnapshot<TContext, TState, TEvent>> | undefined;
   private snapshot: FlowSnapshot<TContext, TState, TEvent>;
+
+  public readonly send = <TDispatchedEvent extends TEvent>(event: TDispatchedEvent) =>
+    this.dispatch(event);
 
   public constructor(
     private readonly definition: IFlowDefinitionRuntime<TContext, TEvent, TState>,

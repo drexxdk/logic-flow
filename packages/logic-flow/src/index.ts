@@ -11,6 +11,7 @@ export {
   type FlowEventUnion,
   type FlowHandler,
   type FlowHandlerApi,
+  type FlowInstanceOptions,
   type FlowSnapshot,
   type FlowStateNames,
   type FlowStateRefs,

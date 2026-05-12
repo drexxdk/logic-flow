@@ -280,6 +280,146 @@
 			"problemMatcher": [
 				"$eslint-stylish"
 			]
+		},
+		{
+			"label": "logic-flow auto-start tests",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow auto-start rerun",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow typecheck auto-start",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"typecheck"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "logic-flow lint auto-start",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"lint"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		},
+		{
+			"label": "demo typecheck auto-start",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "logic-flow send alias tests",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow send alias rerun",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"exec",
+				"vitest",
+				"run",
+				"test/createFlow.test.ts"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "logic-flow typecheck send",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"typecheck"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
+		},
+		{
+			"label": "logic-flow lint send",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"lint"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		},
+		{
+			"label": "demo typecheck send",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			]
 		}
 	]
 }

@@ -579,4 +579,98 @@ describe('createFlow', () => {
     expect(instance.getSnapshot().state).toBe('idle');
     expect(instance.getSnapshot().context.ready).toBe(false);
   });
+
+  it('can auto-start an instance from the flow definition', async () => {
+    const flow = createFlow({
+      name: 'auto-start-instance',
+      context: z.object({ entered: z.number() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { entered: 0 },
+    })
+      .step('idle', ({ enter }) => [
+        enter(({ ctx, update }) => {
+          update({ entered: ctx.entered + 1 });
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance({ autoStart: true });
+
+    await Promise.resolve();
+
+    expect(instance.getSnapshot().context.entered).toBe(1);
+  });
+
+  it('does not rerun enter handlers when start is called after auto-start', async () => {
+    const order: string[] = [];
+
+    const flow = createFlow({
+      name: 'auto-start-idempotent',
+      context: z.object({ entered: z.number() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { entered: 0 },
+    })
+      .step('idle', ({ enter }) => [
+        enter(({ ctx, update }) => {
+          order.push('enter');
+          update({ entered: ctx.entered + 1 });
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance({ autoStart: true });
+
+    await Promise.resolve();
+    await instance.start();
+
+    expect(order).toEqual(['enter']);
+    expect(instance.getSnapshot().context.entered).toBe(1);
+  });
+
+  it('supports send as an alias for external dispatch', async () => {
+    const flow = createFlow({
+      name: 'send-alias',
+      context: z.object({ count: z.number() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { count: 0 },
+    })
+      .step('idle', ({ on }) => [
+        on('INC', {}, ({ ctx, update }) => {
+          update({ count: ctx.count + 1 });
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+
+    await instance.send({ type: 'INC' });
+
+    expect(instance.getSnapshot().context.count).toBe(1);
+  });
+
+  it('keeps send usable when passed around as a callback', async () => {
+    const flow = createFlow({
+      name: 'send-callback',
+      context: z.object({ count: z.number() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { count: 0 },
+    })
+      .step('idle', ({ on }) => [
+        on('INC', {}, ({ ctx, update }) => {
+          update({ count: ctx.count + 1 });
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+    const send = instance.send;
+
+    await send({ type: 'INC' });
+
+    expect(instance.getSnapshot().context.count).toBe(1);
+  });
 });

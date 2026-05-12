@@ -89,6 +89,16 @@ What this buys you:
 - optional `targets` metadata narrows `goto(...)` to the declared destinations and is exposed on `flow.transitions`
 - the built flow exposes the full inferred event union to `dispatch(...)`
 
+When you want to immediately run the initial enter lifecycle, you can create an instance with:
+
+```ts
+const instance = flow.createInstance({ autoStart: true });
+```
+
+This is a convenience for the common `createInstance()` + `start()` pattern in UI integrations.
+
+For external callers, `instance.send(event)` is also available as a small alias for `instance.dispatch(event)`.
+
 ## Runtime Semantics
 
 The current runtime contract is intentionally small but now reasonably explicit:
