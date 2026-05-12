@@ -2,11 +2,11 @@ const terminalGotoRule = {
   meta: {
     type: 'problem',
     docs: {
-      description: 'Require goto(...) to be the last statement in its block.',
+      description: 'Require terminal flow operations to be the last statement in their block.',
     },
     schema: [],
     messages: {
-      terminalGoto: 'Code after goto(...) in the same block will never execute.',
+      terminalGoto: 'Code after a terminal flow operation in the same block will never execute.',
     },
   },
   create(context) {

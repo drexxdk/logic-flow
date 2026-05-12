@@ -77,3 +77,5 @@ Not implemented yet:
 ## Recommended Immediate Focus
 
 The next best implementation step is to shape a stronger public authoring API before adding more features. The current runtime is enough to prove the direction, but the product value will come from making common workflow code feel obviously better than the XState object model.
+
+For a detailed roadmap focused on replacing XState over time, see [docs/xstate-replacement-plan.md](docs/xstate-replacement-plan.md).
