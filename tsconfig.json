@@ -1,0 +1,4 @@
+{
+  "files": [],
+  "references": [{ "path": "./packages/logic-flow" }, { "path": "./apps/demo" }]
+}
