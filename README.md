@@ -23,6 +23,7 @@ The first version currently includes:
 - state transitions through explicit `goto(...)` with typed `states.*` refs
 - async effects with pending-effect tracking
 - delayed transitions via `schedule(...)`
+- instance lifecycle control through `start()`, `subscribe(...)`, and `destroy()`
 - subscriptions and snapshots for UI integration
 
 This is intentionally narrow. It is a proof of concept for the authoring model, not a complete replacement for advanced statechart features.
@@ -87,6 +88,47 @@ What this buys you:
 - transitions can target `states.review` or `states.publishing` instead of repeating raw strings
 - optional `targets` metadata narrows `goto(...)` to the declared destinations and is exposed on `flow.transitions`
 - the built flow exposes the full inferred event union to `dispatch(...)`
+
+## Runtime Semantics
+
+The current runtime contract is intentionally small but now reasonably explicit:
+
+- `goto(...)` is terminal inside a handler or `enter(...)` hook
+- flow-api `dispatch(...)` is also terminal inside a handler or `enter(...)` hook
+- `start()` runs the initial enter lifecycle once per instance
+- `destroy()` makes the instance inert: queued work, timers, and in-flight async completions stop mutating the snapshot
+- `schedule(...)` work is owned by the active state execution and is cleared on cancellation, transition, or destroy
+- thrown handler or `enter(...)` errors reject the corresponding `dispatch(...)` or `start()` call
+- rejected `effect(...)` work propagates failure but still clears `pendingEffects`
+
+For the full behavior rules and examples, see [docs/execution-semantics.md](docs/execution-semantics.md).
+
+## Capability Snapshot
+
+This is the practical support level today.
+
+| Capability                      | Status    | Notes                                                                           |
+| ------------------------------- | --------- | ------------------------------------------------------------------------------- |
+| Flat named states               | Supported | Core builder/runtime model                                                      |
+| Step-local event declarations   | Supported | Events are declared where they are handled                                      |
+| Typed event payloads            | Supported | Inferred from local Zod shapes                                                  |
+| Context validation              | Supported | Validated with Zod on initialization and updates                                |
+| Direct transitions              | Supported | `goto(...)` plus optional `targets` narrowing                                   |
+| Internal event feedback         | Supported | Flow-api `dispatch(...)` is supported and terminal                              |
+| Async effects                   | Supported | `effect(...)` tracks pending work                                               |
+| Delayed transitions             | Supported | `schedule(...)` supports delayed work scoped to state execution                 |
+| Snapshot subscriptions          | Supported | `getSnapshot()` and `subscribe(...)` are available                              |
+| Lifecycle disposal              | Supported | `destroy()` clears timers and prevents stale updates                            |
+| ESLint authoring rule           | Supported | `logic-flow/terminal-goto`                                                      |
+| Child flows / actors            | Not yet   | Planned as the next major capability after lifecycle hardening                  |
+| Exit hooks / cancellation model | Not yet   | Current teardown behavior is instance-level, not full state-scoped cancellation |
+| Hierarchical states             | Not yet   | Flat states only                                                                |
+| History states                  | Not yet   | No history semantics yet                                                        |
+| Parallel states                 | Not yet   | No orthogonal regions yet                                                       |
+| Persistence / restore API       | Not yet   | Snapshots are inspectable, but no restore contract exists                       |
+| Devtools / inspection UI        | Not yet   | Demo exposes snapshots, but there is no dedicated inspector                     |
+
+If you need full XState-style orchestration features today, this project is not there yet. If you need explicit flat workflows with strong typing, local event declaration, async tracking, and inspectable snapshots, the current runtime is already usable.
 
 ## Workspace
 
