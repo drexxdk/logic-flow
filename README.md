@@ -65,6 +65,12 @@ Run the demo app:
 pnpm dev
 ```
 
+Deploy the demo to GitHub Pages:
+
+1. Enable GitHub Pages in the repository settings and choose GitHub Actions as the source.
+2. Push to `main`.
+3. The workflow in `.github/workflows/deploy-demo.yml` will build the workspace and publish `apps/demo/dist`.
+
 Run package tests:
 
 ```bash
