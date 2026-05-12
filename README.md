@@ -61,7 +61,7 @@ const publishingFlow = createFlow({
     on(
       'SUBMIT',
       {},
-      { targets: [states.review, states.publishing] as const },
+      [states.review, states.publishing],
       ({ ctx, goto, update }) => {
         if (ctx.title.trim().length < 6) {
           update({ error: 'Title must be at least 6 characters.' });

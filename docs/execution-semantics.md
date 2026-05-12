@@ -16,7 +16,7 @@ They are related, but they are not the same.
 Use `goto(...)` when you already know the next state and want to move there directly.
 
 ```ts
-on('APPROVE', {}, { targets: [states.publishing] as const }, ({ goto }) => {
+on('APPROVE', {}, states.publishing, ({ goto }) => {
   goto(states.publishing);
 });
 ```
@@ -46,7 +46,7 @@ That means once either of these is called successfully, the current execution co
 Examples:
 
 ```ts
-on('APPROVE', {}, { targets: [states.publishing] as const }, ({ goto }) => {
+on('APPROVE', {}, states.publishing, ({ goto }) => {
   goto(states.publishing);
 
   // unreachable
@@ -124,7 +124,7 @@ This keeps delayed work scoped to the state that created it, instead of allowing
 When you know the intended destinations up front, declare them in `targets`.
 
 ```ts
-on('SUBMIT', {}, { targets: [states.review, states.publishing] as const }, ({ ctx, goto }) => {
+on('SUBMIT', {}, [states.review, states.publishing], ({ ctx, goto }) => {
   goto(ctx.requiresLegalReview ? states.review : states.publishing);
 });
 ```

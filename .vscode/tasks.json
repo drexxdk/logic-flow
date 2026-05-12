@@ -499,6 +499,112 @@
 				"$tsc"
 			],
 			"group": "build"
+		},
+		{
+			"label": "logic-flow build source export cleanup",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "demo typecheck source export cleanup",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow build final export cleanup",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow tests direct targets",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"test",
+				"--",
+				"test/createFlow.test.ts"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "demo typecheck direct targets",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow tests direct targets rerun",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"test",
+				"--",
+				"test/createFlow.test.ts"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "demo typecheck direct targets rerun",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow build direct targets final",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
 		}
 	]
 }

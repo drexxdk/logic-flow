@@ -24,7 +24,7 @@ export const renameFlow = createFlow({
   },
 })
   .step('closed', ({ on, states }) => [
-    on('OPEN', {}, { targets: [states.editing] as const }, ({ ctx, goto, update }) => {
+    on('OPEN', {}, states.editing, ({ ctx, goto, update }) => {
       update({ modalOpen: true, heading: ctx.savedHeading, error: undefined });
       goto(states.editing);
     }),
@@ -47,11 +47,11 @@ export const renameFlow = createFlow({
 
       update({ heading: event.value, error });
     }),
-    on('CLOSE', {}, { targets: [states.closed] as const }, ({ goto, update }) => {
+    on('CLOSE', {}, states.closed, ({ goto, update }) => {
       update({ modalOpen: false, error: undefined });
       goto(states.closed);
     }),
-    on('SAVE', {}, { targets: [states.saving] as const }, ({ ctx, goto }) => {
+    on('SAVE', {}, states.saving, ({ ctx, goto }) => {
       if (ctx.error || ctx.heading.trim().length === 0) {
         return;
       }
@@ -73,7 +73,7 @@ export const renameFlow = createFlow({
     on(
       'FAILED',
       { message: z.string() },
-      { targets: [states.editing] as const },
+      states.editing,
       ({ event, goto, update }) => {
         update({ error: event.message });
         goto(states.editing);
@@ -82,7 +82,7 @@ export const renameFlow = createFlow({
     on(
       'SAVED',
       { heading: z.string() },
-      { targets: [states.success] as const },
+      states.success,
       ({ event, goto, update }) => {
         update({
           savedHeading: event.heading,
@@ -95,7 +95,7 @@ export const renameFlow = createFlow({
     ),
   ])
   .step('success', ({ enter, states }) => [
-    enter({ targets: [states.closed] as const }, ({ schedule }) => {
+    enter(states.closed, ({ schedule }) => {
       schedule(1200, ({ goto: delayedGoto }) => {
         delayedGoto(states.closed);
       });

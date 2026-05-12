@@ -1,23 +1,24 @@
 import { z } from 'zod';
 
-export type Awaitable<T> = T | Promise<T>;
+type Awaitable<T> = T | Promise<T>;
 export type FlowEvent = { type: string };
-export type FlowContextPatch<TContext> =
-  | Partial<TContext>
-  | ((context: TContext) => Partial<TContext>);
-export type FlowEventUnion<TEvent extends FlowEvent> = TEvent;
-export type FlowStateNames<TStates extends readonly string[]> = TStates[number];
-export type FlowStateRefs<TState extends string> = { readonly [K in TState]: K };
-export type FlowTransitionTargets<TState extends string> = readonly TState[];
+type FlowContextPatch<TContext> = Partial<TContext> | ((context: TContext) => Partial<TContext>);
+type FlowStateNames<TStates extends readonly string[]> = TStates[number];
+type FlowStateRefs<TState extends string> = { readonly [K in TState]: K };
+type FlowTransitionTargets<TState extends string> = readonly TState[];
+type FlowTransitionInput<
+  TState extends string,
+  TTargets extends FlowTransitionTargets<TState> = readonly TState[],
+> = FlowTransitionOptions<TState, TTargets> | TTargets | TState;
 
-export interface FlowTransitionOptions<
+interface FlowTransitionOptions<
   TState extends string,
   TTargets extends FlowTransitionTargets<TState>,
 > {
   readonly targets: TTargets;
 }
 
-export interface FlowTransitionDescriptor<TState extends string> {
+interface FlowTransitionDescriptor<TState extends string> {
   readonly kind: 'enter' | 'event';
   readonly event?: string;
   readonly targets: readonly TState[];
@@ -34,7 +35,7 @@ export interface FlowInstanceOptions {
   autoStart?: boolean;
 }
 
-export interface FlowApi<
+interface FlowApi<
   TContext,
   TAllEvents extends FlowEvent,
   TState extends string,
@@ -54,7 +55,7 @@ export interface FlowApi<
   getSnapshot(): FlowSnapshot<TContext, TState, TAllEvents>;
 }
 
-export interface FlowHandlerApi<
+interface FlowHandlerApi<
   TContext,
   TAllEvents extends FlowEvent,
   TState extends string,
@@ -64,7 +65,7 @@ export interface FlowHandlerApi<
   readonly event: TEvent;
 }
 
-export interface FlowEnterApi<
+interface FlowEnterApi<
   TContext,
   TAllEvents extends FlowEvent,
   TState extends string,
@@ -73,7 +74,7 @@ export interface FlowEnterApi<
   readonly event: TAllEvents | undefined;
 }
 
-export type FlowHandler<
+type FlowHandler<
   TContext,
   TAllEvents extends FlowEvent,
   TState extends string,
@@ -81,7 +82,7 @@ export type FlowHandler<
   TGotoState extends TState = TState,
 > = (api: FlowHandlerApi<TContext, TAllEvents, TState, TEvent, TGotoState>) => Awaitable<void>;
 
-export type FlowEnterHandler<
+type FlowEnterHandler<
   TContext,
   TEvent extends FlowEvent,
   TState extends string,
@@ -167,6 +168,18 @@ interface IStepRegistrar<TContext, TAllEvents extends FlowEvent, TState extends 
       EventFromShape<TType, TShape>
     >,
   ): EventRegistration<TState, TType, TShape, readonly TState[]>;
+  on<const TType extends string, TShape extends EventShape, const TTarget extends TState>(
+    type: TType,
+    shape: TShape,
+    target: TTarget,
+    handler: FlowHandler<
+      TContext,
+      TAllEvents | EventFromShape<TType, TShape>,
+      TState,
+      EventFromShape<TType, TShape>,
+      TTarget
+    >,
+  ): EventRegistration<TState, TType, TShape, readonly [TTarget]>;
   on<
     const TType extends string,
     TShape extends EventShape,
@@ -174,7 +187,7 @@ interface IStepRegistrar<TContext, TAllEvents extends FlowEvent, TState extends 
   >(
     type: TType,
     shape: TShape,
-    options: FlowTransitionOptions<TState, TTargets>,
+    targets: FlowTransitionInput<TState, TTargets>,
     handler: FlowHandler<
       TContext,
       TAllEvents | EventFromShape<TType, TShape>,
@@ -186,8 +199,12 @@ interface IStepRegistrar<TContext, TAllEvents extends FlowEvent, TState extends 
   enter(
     handler: FlowEnterHandler<TContext, TAllEvents, TState>,
   ): EnterRegistration<TState, readonly TState[]>;
+  enter<const TTarget extends TState>(
+    target: TTarget,
+    handler: FlowEnterHandler<TContext, TAllEvents, TState, TTarget>,
+  ): EnterRegistration<TState, readonly [TTarget]>;
   enter<const TTargets extends readonly TState[]>(
-    options: FlowTransitionOptions<TState, TTargets>,
+    targets: FlowTransitionInput<TState, TTargets>,
     handler: FlowEnterHandler<TContext, TAllEvents, TState, TTargets[number]>,
   ): EnterRegistration<TState, TTargets>;
 }
@@ -713,10 +730,28 @@ function createEventSchema<const TType extends string, TShape extends EventShape
   } as { type: z.ZodLiteral<TType> } & TShape);
 }
 
+function isTransitionOptions<TState extends string>(
+  targetOrTargets: FlowTransitionInput<TState, readonly TState[]>,
+): targetOrTargets is FlowTransitionOptions<TState, readonly TState[]> {
+  return !Array.isArray(targetOrTargets);
+}
+
 function normalizeTargets<TState extends string>(
-  options?: FlowTransitionOptions<TState, readonly TState[]>,
+  targetOrTargets?: FlowTransitionInput<TState, readonly TState[]>,
 ): readonly TState[] {
-  return options?.targets ?? [];
+  if (typeof targetOrTargets === 'string') {
+    return [targetOrTargets];
+  }
+
+  if (Array.isArray(targetOrTargets)) {
+    return targetOrTargets;
+  }
+
+  if (!targetOrTargets) {
+    return [];
+  }
+
+  return isTransitionOptions(targetOrTargets) ? targetOrTargets.targets : [];
 }
 
 export function createFlow<
@@ -751,7 +786,14 @@ export function createFlow<
 
       const registrar: IStepRegistrar<TContext, TAllEvents, TState> = {
         states: stateRefs,
-        on: ((type, shape, optionsOrHandler, maybeHandler) => {
+        on: ((
+          type: string,
+          shape: EventShape,
+          optionsOrHandler:
+            | FlowTransitionInput<TState, readonly TState[]>
+            | FlowHandler<TContext, FlowEvent, TState, FlowEvent>,
+          maybeHandler?: FlowHandler<TContext, FlowEvent, TState, FlowEvent>,
+        ) => {
           const hasOptions = typeof maybeHandler === 'function';
           const options = hasOptions ? optionsOrHandler : undefined;
           const handler = hasOptions ? maybeHandler : optionsOrHandler;
@@ -760,18 +802,23 @@ export function createFlow<
             kind: 'event',
             type,
             schema: createEventSchema(type, shape),
-            targets: normalizeTargets(options as FlowTransitionOptions<TState, readonly TState[]>),
+            targets: normalizeTargets(options as FlowTransitionInput<TState, readonly TState[]>),
             handler,
           } as EventRegistration<TState, typeof type, typeof shape, readonly TState[]>;
         }) as IStepRegistrar<TContext, TAllEvents, TState>['on'],
-        enter: ((optionsOrHandler, maybeHandler) => {
+        enter: ((
+          optionsOrHandler:
+            | FlowTransitionInput<TState, readonly TState[]>
+            | FlowEnterHandler<TContext, FlowEvent, TState>,
+          maybeHandler?: FlowEnterHandler<TContext, FlowEvent, TState>,
+        ) => {
           const hasOptions = typeof maybeHandler === 'function';
           const options = hasOptions ? optionsOrHandler : undefined;
           const handler = hasOptions ? maybeHandler : optionsOrHandler;
 
           return {
             kind: 'enter',
-            targets: normalizeTargets(options as FlowTransitionOptions<TState, readonly TState[]>),
+            targets: normalizeTargets(options as FlowTransitionInput<TState, readonly TState[]>),
             handler,
           };
         }) as IStepRegistrar<TContext, TAllEvents, TState>['enter'],

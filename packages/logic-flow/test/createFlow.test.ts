@@ -204,17 +204,12 @@ describe('createFlow', () => {
       initialContext: { approved: false },
     })
       .step('draft', ({ on, states }) => [
-        on(
-          'SUBMIT',
-          {},
-          { targets: [states.review, states.published] as const },
-          ({ ctx, goto }) => {
-            goto(ctx.approved ? states.published : states.review);
-          },
-        ),
+        on('SUBMIT', {}, [states.review, states.published], ({ ctx, goto }) => {
+          goto(ctx.approved ? states.published : states.review);
+        }),
       ])
       .step('review', ({ enter, states }) => [
-        enter({ targets: [states.published] as const }, ({ goto }) => {
+        enter(states.published, ({ goto }) => {
           goto(states.published);
         }),
       ])
@@ -225,6 +220,45 @@ describe('createFlow', () => {
       draft: [{ kind: 'event', event: 'SUBMIT', targets: ['review', 'published'] }],
       review: [{ kind: 'enter', targets: ['published'] }],
       published: [],
+    });
+  });
+
+  it('accepts direct target arguments for event and enter transitions', async () => {
+    const flow = createFlow({
+      name: 'direct-targets',
+      context: z.object({ ready: z.boolean() }),
+      states: ['idle', 'review', 'done'] as const,
+      initial: 'idle',
+      initialContext: { ready: false },
+    })
+      .step('idle', ({ on, states }) => [
+        on('SUBMIT', {}, states.review, ({ goto }) => {
+          goto(states.review);
+        }),
+      ])
+      .step('review', ({ enter, on, states }) => [
+        enter(states.done, ({ goto }) => {
+          goto(states.done);
+        }),
+        on('RESET', {}, states.idle, ({ goto }) => {
+          goto(states.idle);
+        }),
+      ])
+      .step('done', () => [])
+      .build();
+
+    const instance = flow.createInstance();
+
+    await instance.dispatch({ type: 'SUBMIT' });
+
+    expect(instance.getSnapshot().state).toBe('done');
+    expect(flow.transitions).toEqual({
+      idle: [{ kind: 'event', event: 'SUBMIT', targets: ['review'] }],
+      review: [
+        { kind: 'enter', targets: ['done'] },
+        { kind: 'event', event: 'RESET', targets: ['idle'] },
+      ],
+      done: [],
     });
   });
 

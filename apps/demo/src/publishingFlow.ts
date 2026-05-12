@@ -31,7 +31,7 @@ export const publishingFlow = createFlow({
     on(
       'SUBMIT',
       {},
-      { targets: [states.review, states.publishing] as const },
+      [states.review, states.publishing],
       ({ ctx, goto, update }) => {
         if (ctx.title.trim().length < 6) {
           update({ error: 'Title must be at least 6 characters.' });
@@ -48,7 +48,7 @@ export const publishingFlow = createFlow({
     ),
   ])
   .step('review', ({ on, states }) => [
-    on('APPROVE', {}, { targets: [states.publishing] as const }, ({ goto }) => {
+    on('APPROVE', {}, states.publishing, ({ goto }) => {
       goto(states.publishing);
     }),
   ])
@@ -67,20 +67,20 @@ export const publishingFlow = createFlow({
     on(
       'FAILED',
       { message: z.string() },
-      { targets: [states.draft] as const },
+      states.draft,
       ({ event, goto, update }) => {
         update({ error: event.message });
         goto(states.draft);
       },
     ),
 
-    on('PUBLISHED', {}, { targets: [states.published] as const }, ({ goto, update }) => {
+    on('PUBLISHED', {}, states.published, ({ goto, update }) => {
       update({ published: true, error: undefined });
       goto(states.published);
     }),
   ])
   .step('published', ({ enter, states }) => [
-    enter({ targets: [states.draft] as const }, ({ schedule }) => {
+    enter(states.draft, ({ schedule }) => {
       schedule(1500, ({ goto, update }) => {
         update({ published: false });
         goto(states.draft);
