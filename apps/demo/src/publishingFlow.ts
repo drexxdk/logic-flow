@@ -11,14 +11,6 @@ export const publishingFlow = createFlow({
     error: z.string().optional(),
     published: z.boolean(),
   }),
-  events: {
-    CHANGE_TITLE: z.object({ type: z.literal('CHANGE_TITLE'), value: z.string() }),
-    TOGGLE_LEGAL_REVIEW: z.object({ type: z.literal('TOGGLE_LEGAL_REVIEW') }),
-    SUBMIT: z.object({ type: z.literal('SUBMIT') }),
-    APPROVE: z.object({ type: z.literal('APPROVE') }),
-    PUBLISHED: z.object({ type: z.literal('PUBLISHED') }),
-    FAILED: z.object({ type: z.literal('FAILED'), message: z.string() }),
-  },
   states: ['draft', 'review', 'publishing', 'published'] as const,
   initial: 'draft',
   initialContext: {
@@ -27,35 +19,35 @@ export const publishingFlow = createFlow({
     published: false,
   },
 })
-  .step('draft', ({ on }) => {
-    on('CHANGE_TITLE', ({ event, update }) => {
+  .step('draft', ({ on, states }) => [
+    on('CHANGE_TITLE', { value: z.string() }, ({ event, update }) => {
       update({ title: event.value, error: undefined, published: false });
-    });
+    }),
 
-    on('TOGGLE_LEGAL_REVIEW', ({ ctx, update }) => {
+    on('TOGGLE_LEGAL_REVIEW', {}, ({ ctx, update }) => {
       update({ requiresLegalReview: !ctx.requiresLegalReview });
-    });
+    }),
 
-    on('SUBMIT', ({ ctx, goto, update }) => {
+    on('SUBMIT', {}, ({ ctx, goto, update }) => {
       if (ctx.title.trim().length < 6) {
         update({ error: 'Title must be at least 6 characters.' });
         return;
       }
 
       if (ctx.requiresLegalReview) {
-        goto('review');
+        goto(states.review);
         return;
       }
 
-      goto('publishing');
-    });
-  })
-  .step('review', ({ on }) => {
-    on('APPROVE', ({ goto }) => {
-      goto('publishing');
-    });
-  })
-  .step('publishing', ({ enter, on }) => {
+      goto(states.publishing);
+    }),
+  ])
+  .step('review', ({ on, states }) => [
+    on('APPROVE', {}, ({ goto }) => {
+      goto(states.publishing);
+    }),
+  ])
+  .step('publishing', ({ enter, on, states }) => [
     enter(async ({ dispatch, effect }) => {
       try {
         await effect('publishRequest', async () => {
@@ -65,24 +57,24 @@ export const publishingFlow = createFlow({
       } catch {
         await dispatch({ type: 'FAILED', message: 'Publish request failed.' });
       }
-    });
+    }),
 
-    on('FAILED', ({ event, goto, update }) => {
+    on('FAILED', { message: z.string() }, ({ event, goto, update }) => {
       update({ error: event.message });
-      goto('draft');
-    });
+      goto(states.draft);
+    }),
 
-    on('PUBLISHED', ({ goto, update }) => {
+    on('PUBLISHED', {}, ({ goto, update }) => {
       update({ published: true, error: undefined });
-      goto('published');
-    });
-  })
-  .step('published', ({ enter }) => {
+      goto(states.published);
+    }),
+  ])
+  .step('published', ({ enter, states }) => [
     enter(({ schedule }) => {
       schedule(1500, ({ goto, update }) => {
         update({ published: false });
-        goto('draft');
+        goto(states.draft);
       });
-    });
-  })
+    }),
+  ])
   .build();

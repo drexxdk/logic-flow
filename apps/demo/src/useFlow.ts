@@ -1,21 +1,21 @@
-import type { FlowEventSchemas, FlowInstance, FlowSnapshot } from 'logic-flow';
+import type { FlowEvent, FlowInstance, FlowSnapshot } from 'logic-flow';
 import { useEffect, useMemo, useState } from 'react';
 
-interface IFlowDefinition<TContext, TSchemas extends FlowEventSchemas, TState extends string> {
-  createInstance(): FlowInstance<TContext, TSchemas, TState>;
+interface IFlowDefinition<TContext, TEvent extends FlowEvent, TState extends string> {
+  createInstance(): FlowInstance<TContext, TEvent, TState>;
 }
 
-export function useFlow<TContext, TSchemas extends FlowEventSchemas, TState extends string>(
-  definition: IFlowDefinition<TContext, TSchemas, TState>,
+export function useFlow<TContext, TEvent extends FlowEvent, TState extends string>(
+  definition: IFlowDefinition<TContext, TEvent, TState>,
 ) {
   const instance = useMemo(() => definition.createInstance(), [definition]);
-  const [snapshot, setSnapshot] = useState<FlowSnapshot<TContext, TState, unknown>>(() =>
+  const [snapshot, setSnapshot] = useState<FlowSnapshot<TContext, TState, TEvent>>(() =>
     instance.getSnapshot(),
   );
 
   useEffect(() => {
     const unsubscribe = instance.subscribe((nextSnapshot) => {
-      setSnapshot(nextSnapshot as FlowSnapshot<TContext, TState, unknown>);
+      setSnapshot(nextSnapshot);
     });
 
     void instance.start();
@@ -29,7 +29,7 @@ export function useFlow<TContext, TSchemas extends FlowEventSchemas, TState exte
   return {
     instance,
     snapshot,
-    send: (event: Parameters<typeof instance.dispatch>[0]) => {
+    send: (event: TEvent) => {
       void instance.dispatch(event);
     },
   };

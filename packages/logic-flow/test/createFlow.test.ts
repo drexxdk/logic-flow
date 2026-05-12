@@ -20,18 +20,15 @@ describe('createFlow', () => {
     const flow = createFlow({
       name: 'counter',
       context: z.object({ count: z.number() }),
-      events: {
-        ADD: z.object({ type: z.literal('ADD'), amount: z.number().int().positive() }),
-      },
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { count: 0 },
     })
-      .step('idle', ({ on }) => {
-        on('ADD', ({ ctx, event, update }) => {
+      .step('idle', ({ on }) => [
+        on('ADD', { amount: z.number().int().positive() }, ({ ctx, event, update }) => {
           update({ count: ctx.count + event.amount });
-        });
-      })
+        }),
+      ])
       .build();
 
     const instance = flow.createInstance();
@@ -46,23 +43,20 @@ describe('createFlow', () => {
         status: z.enum(['idle', 'error', 'ready']),
         note: z.string().optional(),
       }),
-      events: {
-        SUBMIT: z.object({ type: z.literal('SUBMIT'), title: z.string() }),
-      },
       states: ['editing'] as const,
       initial: 'editing',
       initialContext: { status: 'idle' },
     })
-      .step('editing', ({ on }) => {
-        on('SUBMIT', ({ event, update }) => {
+      .step('editing', ({ on }) => [
+        on('SUBMIT', { title: z.string() }, ({ event, update }) => {
           if (event.title.trim().length < 5) {
             update({ status: 'error', note: 'too-short' });
             return;
           }
 
           update({ status: 'ready', note: undefined });
-        });
-      })
+        }),
+      ])
       .build();
 
     const instance = flow.createInstance();
@@ -80,21 +74,18 @@ describe('createFlow', () => {
     const flow = createFlow({
       name: 'effects',
       context: z.object({ done: z.boolean() }),
-      events: {
-        SAVE: z.object({ type: z.literal('SAVE') }),
-      },
       states: ['idle', 'done'] as const,
       initial: 'idle',
       initialContext: { done: false },
     })
-      .step('idle', ({ on }) => {
-        on('SAVE', async ({ effect, goto, update }) => {
+      .step('idle', ({ on, states }) => [
+        on('SAVE', {}, async ({ effect, goto, update }) => {
           await effect('persist', () => deferred.promise);
           update({ done: true });
-          goto('done');
-        });
-      })
-      .step('done', () => undefined)
+          goto(states.done);
+        }),
+      ])
+      .step('done', () => [])
       .build();
 
     const instance = flow.createInstance();
@@ -116,27 +107,24 @@ describe('createFlow', () => {
     const flow = createFlow({
       name: 'delay',
       context: z.object({ finished: z.boolean() }),
-      events: {
-        COMPLETE: z.object({ type: z.literal('COMPLETE') }),
-      },
       states: ['idle', 'success', 'closed'] as const,
       initial: 'idle',
       initialContext: { finished: false },
     })
-      .step('idle', ({ on }) => {
-        on('COMPLETE', ({ goto, update }) => {
+      .step('idle', ({ on, states }) => [
+        on('COMPLETE', {}, ({ goto, update }) => {
           update({ finished: true });
-          goto('success');
-        });
-      })
-      .step('success', ({ enter }) => {
+          goto(states.success);
+        }),
+      ])
+      .step('success', ({ enter, states }) => [
         enter(({ schedule }) => {
           schedule(250, ({ goto: delayedGoto }) => {
-            delayedGoto('closed');
+            delayedGoto(states.closed);
           });
-        });
-      })
-      .step('closed', () => undefined)
+        }),
+      ])
+      .step('closed', () => [])
       .build();
 
     const instance = flow.createInstance();

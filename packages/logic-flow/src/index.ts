@@ -7,10 +7,11 @@ export {
   type FlowDefinition,
   type FlowEnterApi,
   type FlowEnterHandler,
-  type FlowEventSchemas,
+  type FlowEvent,
   type FlowEventUnion,
   type FlowHandler,
   type FlowHandlerApi,
   type FlowSnapshot,
   type FlowStateNames,
+  type FlowStateRefs,
 } from './createFlow';
