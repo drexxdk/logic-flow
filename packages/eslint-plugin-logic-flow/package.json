@@ -1,0 +1,24 @@
+{
+  "name": "eslint-plugin-logic-flow",
+  "version": "0.1.0",
+  "description": "ESLint rules for logic-flow workflows.",
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "keywords": [
+    "eslint",
+    "eslintplugin",
+    "logic-flow"
+  ],
+  "peerDependencies": {
+    "eslint": "^9.0.0"
+  },
+  "scripts": {
+    "lint": "eslint \"index.js\""
+  }
+}

@@ -40,7 +40,7 @@ export interface FlowApi<
   readonly state: TState;
   readonly states: FlowStateRefs<TState>;
   update(patch: FlowContextPatch<TContext>): TContext;
-  goto(state: TGotoState): void;
+  goto(state: TGotoState): never;
   dispatch<TEvent extends FlowEvent>(event: TEvent): Promise<void>;
   effect<TResult>(name: string, task: () => Awaitable<TResult>): Promise<TResult>;
   schedule(
@@ -126,8 +126,8 @@ interface IStepDefinition<TContext, TAllEvents extends FlowEvent, TState extends
   transitions: readonly FlowTransitionDescriptor<TState>[];
 }
 
-interface ITransitionRef<TState extends string> {
-  nextState?: TState;
+class FlowTransitionSignal<TState extends string> {
+  public constructor(public readonly nextState: TState) {}
 }
 
 interface ICreateFlowConfig<
@@ -400,20 +400,15 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     task: (api: FlowEnterApi<TContext, TEvent, TState>) => Awaitable<void>,
     event: TEvent | undefined,
   ): Promise<void> {
-    const transition: ITransitionRef<TState> = {};
-    const api = this.createEnterApi(event, transition);
+    const api = this.createEnterApi(event);
+    const nextState = await this.captureTransition(task, api);
 
-    await task(api);
-
-    if (transition.nextState) {
-      await this.transitionTo(transition.nextState, event);
+    if (nextState) {
+      await this.transitionTo(nextState, event);
     }
   }
 
-  private createApiBase(
-    event: TEvent | undefined,
-    transition: ITransitionRef<TState>,
-  ): FlowApi<TContext, TEvent, TState> {
+  private createApiBase(event: TEvent | undefined): FlowApi<TContext, TEvent, TState> {
     const readSnapshot = () => this.snapshot;
     const stateRefs = this.definition.getStates();
 
@@ -431,7 +426,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
           throw new Error(`Unknown state "${state}" in flow "${this.definition.name}".`);
         }
 
-        transition.nextState = state;
+        throw new FlowTransitionSignal(state);
       },
       dispatch: <TDispatchedEvent extends FlowEvent>(nextEvent: TDispatchedEvent) =>
         this.dispatch(nextEvent),
@@ -446,9 +441,8 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
 
   private createHandlerApi<TCurrentEvent extends TEvent>(
     event: TCurrentEvent,
-    transition: ITransitionRef<TState>,
   ): FlowHandlerApi<TContext, TEvent, TState, TCurrentEvent> {
-    const baseApi = this.createApiBase(event, transition);
+    const baseApi = this.createApiBase(event);
 
     return {
       ...baseApi,
@@ -456,16 +450,33 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     };
   }
 
-  private createEnterApi(
-    event: TEvent | undefined,
-    transition: ITransitionRef<TState>,
-  ): FlowEnterApi<TContext, TEvent, TState> {
-    const baseApi = this.createApiBase(event, transition);
+  private createEnterApi(event: TEvent | undefined): FlowEnterApi<TContext, TEvent, TState> {
+    const baseApi = this.createApiBase(event);
 
     return {
       ...baseApi,
       event,
     };
+  }
+
+  private isTransitionSignal(error: unknown): error is FlowTransitionSignal<TState> {
+    return error instanceof FlowTransitionSignal;
+  }
+
+  private async captureTransition<TApi>(
+    task: (api: TApi) => Awaitable<void>,
+    api: TApi,
+  ): Promise<TState | undefined> {
+    try {
+      await task(api);
+      return undefined;
+    } catch (error) {
+      if (this.isTransitionSignal(error)) {
+        return error.nextState;
+      }
+
+      throw error;
+    }
   }
 
   private async handleEvent(event: TEvent): Promise<void> {
@@ -482,13 +493,14 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
       return;
     }
 
-    const transition: ITransitionRef<TState> = {};
-    const api = this.createHandlerApi(event, transition);
+    const api = this.createHandlerApi(event);
+    const nextState = await this.captureTransition(
+      handler as FlowHandler<TContext, TEvent, TState, TEvent>,
+      api,
+    );
 
-    await handler(api as never);
-
-    if (transition.nextState) {
-      await this.transitionTo(transition.nextState, event);
+    if (nextState) {
+      await this.transitionTo(nextState, event);
     }
   }
 
@@ -507,13 +519,11 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     const step = this.definition.getStep(this.snapshot.state);
 
     for (const enterHandler of step.enterHandlers) {
-      const transition: ITransitionRef<TState> = {};
-      const api = this.createEnterApi(event, transition);
+      const api = this.createEnterApi(event);
+      const nextState = await this.captureTransition(enterHandler, api);
 
-      await enterHandler(api);
-
-      if (transition.nextState) {
-        await this.transitionTo(transition.nextState, event);
+      if (nextState) {
+        await this.transitionTo(nextState, event);
         return;
       }
     }

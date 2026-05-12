@@ -23,6 +23,9 @@ importers:
       eslint:
         specifier: ^9.26.0
         version: 9.39.4
+      eslint-plugin-logic-flow:
+        specifier: workspace:*
+        version: link:packages/eslint-plugin-logic-flow
       globals:
         specifier: ^15.15.0
         version: 15.15.0
@@ -59,6 +62,12 @@ importers:
       zod:
         specifier: ^3.24.4
         version: 3.25.76
+
+  packages/eslint-plugin-logic-flow:
+    dependencies:
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.4
 
   packages/logic-flow:
     dependencies:

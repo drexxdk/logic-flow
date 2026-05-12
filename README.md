@@ -144,6 +144,28 @@ pnpm lint
 pnpm build
 ```
 
+## ESLint Plugin
+
+The workspace also publishes `eslint-plugin-logic-flow` for editor and CI checks that complement the runtime.
+
+Current rule:
+
+- `logic-flow/terminal-goto`: reports meaningful statements after `goto(...)` in the same block
+
+Example consumer config:
+
+```js
+import js from '@eslint/js';
+import logicFlowPlugin from 'eslint-plugin-logic-flow';
+import tseslint from 'typescript-eslint';
+
+export default tseslint.config(
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  logicFlowPlugin.configs.recommended,
+);
+```
+
 ## Design Direction
 
 The intended direction is:

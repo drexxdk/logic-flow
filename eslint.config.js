@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import logicFlowPlugin from 'eslint-plugin-logic-flow';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -8,6 +9,7 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  logicFlowPlugin.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {

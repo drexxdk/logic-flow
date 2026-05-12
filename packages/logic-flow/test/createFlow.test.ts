@@ -138,6 +138,38 @@ describe('createFlow', () => {
     vi.useRealTimers();
   });
 
+  it('stops executing the current handler after goto', async () => {
+    const order: string[] = [];
+
+    const flow = createFlow({
+      name: 'abort-on-goto',
+      context: z.object({ done: z.boolean() }),
+      states: ['idle', 'success'] as const,
+      initial: 'idle',
+      initialContext: { done: false },
+    })
+      .step('idle', ({ on, states }) => [
+        on('COMPLETE', {}, { targets: [states.success] as const }, ({ goto }) => {
+          order.push('before-goto');
+          goto(states.success);
+          order.push('after-goto');
+        }),
+      ])
+      .step('success', ({ enter }) => [
+        enter(() => {
+          order.push('enter-success');
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+
+    await instance.dispatch({ type: 'COMPLETE' });
+
+    expect(order).toEqual(['before-goto', 'enter-success']);
+    expect(instance.getSnapshot().state).toBe('success');
+  });
+
   it('exposes declared transition targets for editor help', () => {
     const flow = createFlow({
       name: 'transition-help',

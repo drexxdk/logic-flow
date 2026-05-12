@@ -51,29 +51,25 @@ export const renameFlow = createFlow({
       update({ modalOpen: false, error: undefined });
       goto(states.closed);
     }),
-    on(
-      'SAVE',
-      {},
-      { targets: [states.saving] as const },
-      async ({ ctx, dispatch, effect, goto }) => {
-        if (ctx.error || ctx.heading.trim().length === 0) {
-          return;
-        }
+    on('SAVE', {}, { targets: [states.saving] as const }, ({ ctx, goto }) => {
+      if (ctx.error || ctx.heading.trim().length === 0) {
+        return;
+      }
 
-        goto(states.saving);
-
-        try {
-          await effect('renameRequest', async () => {
-            await wait(800);
-          });
-          await dispatch({ type: 'SAVED', heading: ctx.heading.trim() });
-        } catch {
-          await dispatch({ type: 'FAILED', message: 'Saving failed. Try again.' });
-        }
-      },
-    ),
+      goto(states.saving);
+    }),
   ])
-  .step('saving', ({ on, states }) => [
+  .step('saving', ({ enter, on, states }) => [
+    enter(async ({ ctx, dispatch, effect }) => {
+      try {
+        await effect('renameRequest', async () => {
+          await wait(800);
+        });
+        await dispatch({ type: 'SAVED', heading: ctx.heading.trim() });
+      } catch {
+        await dispatch({ type: 'FAILED', message: 'Saving failed. Try again.' });
+      }
+    }),
     on(
       'FAILED',
       { message: z.string() },
