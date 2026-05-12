@@ -124,6 +124,7 @@ type StepEvent<TRegistration> =
     : never;
 
 type StepEvents<TRegistrations extends readonly unknown[]> = StepEvent<TRegistrations[number]>;
+type StepRegistrationList<TState extends string> = readonly StepRegistration<TState>[];
 
 interface IStepDefinition<TContext, TAllEvents extends FlowEvent, TState extends string> {
   handlers: Partial<Record<string, FlowHandler<TContext, TAllEvents, TState, FlowEvent>>>;
@@ -705,7 +706,7 @@ interface FlowBuilder<
   TStates extends readonly [string, ...string[]],
   TAllEvents extends FlowEvent,
 > {
-  step<TRegistrations extends readonly StepRegistration<FlowStateNames<TStates>>[]>(
+  step<TRegistrations extends StepRegistrationList<FlowStateNames<TStates>>>(
     name: FlowStateNames<TStates>,
     register: (
       api: IStepRegistrar<z.infer<TContextSchema>, TAllEvents, FlowStateNames<TStates>>,
@@ -770,7 +771,7 @@ export function createFlow<
     TStates,
     TAllEvents
   > => ({
-    step<TRegistrations extends readonly StepRegistration<TState>[]>(
+    step<TRegistrations extends StepRegistrationList<TState>>(
       name: TState,
       register: (api: IStepRegistrar<TContext, TAllEvents, TState>) => TRegistrations,
     ) {

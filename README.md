@@ -58,19 +58,14 @@ const publishingFlow = createFlow({
     on('CHANGE_TITLE', { value: z.string() }, ({ event, update }) => {
       update({ title: event.value, error: undefined, published: false });
     }),
-    on(
-      'SUBMIT',
-      {},
-      [states.review, states.publishing],
-      ({ ctx, goto, update }) => {
-        if (ctx.title.trim().length < 6) {
-          update({ error: 'Title must be at least 6 characters.' });
-          return;
-        }
+    on('SUBMIT', {}, [states.review, states.publishing], ({ ctx, goto, update }) => {
+      if (ctx.title.trim().length < 6) {
+        update({ error: 'Title must be at least 6 characters.' });
+        return;
+      }
 
-        goto(ctx.requiresLegalReview ? states.review : states.publishing);
-      },
-    ),
+      goto(ctx.requiresLegalReview ? states.review : states.publishing);
+    }),
   ])
   .step('review', ({ on, states }) => [
     on('APPROVE', {}, ({ goto }) => {

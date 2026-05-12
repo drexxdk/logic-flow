@@ -70,29 +70,19 @@ export const renameFlow = createFlow({
         await dispatch({ type: 'FAILED', message: 'Saving failed. Try again.' });
       }
     }),
-    on(
-      'FAILED',
-      { message: z.string() },
-      states.editing,
-      ({ event, goto, update }) => {
-        update({ error: event.message });
-        goto(states.editing);
-      },
-    ),
-    on(
-      'SAVED',
-      { heading: z.string() },
-      states.success,
-      ({ event, goto, update }) => {
-        update({
-          savedHeading: event.heading,
-          heading: event.heading,
-          modalOpen: false,
-          error: undefined,
-        });
-        goto(states.success);
-      },
-    ),
+    on('FAILED', { message: z.string() }, states.editing, ({ event, goto, update }) => {
+      update({ error: event.message });
+      goto(states.editing);
+    }),
+    on('SAVED', { heading: z.string() }, states.success, ({ event, goto, update }) => {
+      update({
+        savedHeading: event.heading,
+        heading: event.heading,
+        modalOpen: false,
+        error: undefined,
+      });
+      goto(states.success);
+    }),
   ])
   .step('success', ({ enter, states }) => [
     enter(states.closed, ({ schedule }) => {

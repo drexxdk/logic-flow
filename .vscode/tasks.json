@@ -605,6 +605,156 @@
 			],
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "logic-flow tests imperative step",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"test",
+				"--",
+				"test/createFlow.test.ts"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "logic-flow tests imperative step rerun",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"test",
+				"--",
+				"test/createFlow.test.ts"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "demo typecheck imperative steps",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow build imperative steps",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "demo typecheck imperative steps rerun",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow tests no array steps",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"test",
+				"--",
+				"test/createFlow.test.ts"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "logic-flow tests hybrid steps restored",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"test",
+				"--",
+				"test/createFlow.test.ts"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "demo typecheck hybrid steps restored",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow tests old steps",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"test",
+				"--",
+				"test/createFlow.test.ts"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "demo typecheck old steps",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"demo",
+				"typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow build old steps",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
 		}
 	]
 }

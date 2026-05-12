@@ -28,24 +28,19 @@ export const publishingFlow = createFlow({
       update({ requiresLegalReview: !ctx.requiresLegalReview });
     }),
 
-    on(
-      'SUBMIT',
-      {},
-      [states.review, states.publishing],
-      ({ ctx, goto, update }) => {
-        if (ctx.title.trim().length < 6) {
-          update({ error: 'Title must be at least 6 characters.' });
-          return;
-        }
+    on('SUBMIT', {}, [states.review, states.publishing], ({ ctx, goto, update }) => {
+      if (ctx.title.trim().length < 6) {
+        update({ error: 'Title must be at least 6 characters.' });
+        return;
+      }
 
-        if (ctx.requiresLegalReview) {
-          goto(states.review);
-          return;
-        }
+      if (ctx.requiresLegalReview) {
+        goto(states.review);
+        return;
+      }
 
-        goto(states.publishing);
-      },
-    ),
+      goto(states.publishing);
+    }),
   ])
   .step('review', ({ on, states }) => [
     on('APPROVE', {}, states.publishing, ({ goto }) => {
@@ -63,16 +58,10 @@ export const publishingFlow = createFlow({
         await dispatch({ type: 'FAILED', message: 'Publish request failed.' });
       }
     }),
-
-    on(
-      'FAILED',
-      { message: z.string() },
-      states.draft,
-      ({ event, goto, update }) => {
-        update({ error: event.message });
-        goto(states.draft);
-      },
-    ),
+    on('FAILED', { message: z.string() }, states.draft, ({ event, goto, update }) => {
+      update({ error: event.message });
+      goto(states.draft);
+    }),
 
     on('PUBLISHED', {}, states.published, ({ goto, update }) => {
       update({ published: true, error: undefined });
