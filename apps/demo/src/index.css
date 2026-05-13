@@ -59,6 +59,68 @@ pre {
   margin-bottom: 2rem;
 }
 
+.overview-grid {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.overview-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(31, 28, 43, 0.08);
+  border-radius: 1.5rem;
+  padding: 1.35rem 1.35rem 1.2rem;
+  box-shadow: 0 20px 50px rgba(31, 28, 43, 0.08);
+}
+
+.overview-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.overview-panel > * {
+  position: relative;
+}
+
+.overview-panel h2 {
+  margin: 0.35rem 0 0.75rem;
+  font-size: 1.3rem;
+  line-height: 1.1;
+}
+
+.overview-panel-supported::before {
+  background: linear-gradient(135deg, rgba(223, 244, 221, 0.95), rgba(255, 255, 255, 0.78));
+}
+
+.overview-panel-runtime::before {
+  background: linear-gradient(135deg, rgba(255, 235, 196, 0.95), rgba(255, 255, 255, 0.8));
+}
+
+.overview-panel-planned::before {
+  background: linear-gradient(135deg, rgba(245, 223, 225, 0.95), rgba(255, 255, 255, 0.82));
+}
+
+.overview-label {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7a4d1a;
+}
+
+.overview-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.45rem;
+  line-height: 1.45;
+}
+
 .hero h1 {
   margin: 0 0 1rem;
   font-size: clamp(2.6rem, 4vw, 4.8rem);
@@ -161,6 +223,10 @@ pre {
 }
 
 @media (min-width: 960px) {
+  .overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .demo-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

@@ -126,6 +126,8 @@ await instance.send(failed, { message: 'Network down' });
 
 If external code sends another event while the flow is already processing one, that later event is queued and handled after the active execution finishes. That includes re-entrant sends triggered by subscription callbacks or other observer code reacting to snapshot updates.
 
+If the active event handler rejects, later queued external events still continue in order. Each external `instance.dispatch(...)` or `instance.send(...)` call resolves or rejects for its own queued execution chain instead of being stranded behind an earlier failure.
+
 ## Instance Lifecycle
 
 `FlowInstance` has two important lifecycle boundaries:
@@ -147,6 +149,7 @@ After `destroy()`:
 - pending effect names are removed from the snapshot
 - later external `dispatch(...)` calls are ignored
 - in-flight async completions and scheduled tasks no longer mutate the snapshot
+- already-queued external dispatches settle without running if they have not started yet
 
 This prevents stale work from updating state after the owning UI or runtime has already disposed the flow instance.
 
@@ -224,6 +227,8 @@ Errors thrown by event handlers or `enter(...)` hooks are not swallowed by the r
 - a rejected `effect(...)` promise rejects the surrounding handler or `enter(...)` hook
 
 The runtime still performs normal `effect(...)` cleanup when an effect rejects, so `pendingEffects` does not stay stuck after a failure.
+
+When multiple external events are queued, one rejected event does not cancel the later queued ones automatically. Their own `dispatch(...)` calls still settle when those later events run.
 
 This means application code should treat `start()` and `dispatch(...)` as async boundaries that may fail, and should catch errors there when the flow author has not handled them inside the workflow itself.
 

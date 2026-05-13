@@ -940,6 +940,98 @@ describe('createFlow', () => {
     expect(instance.getSnapshot().context.attempted).toBe(true);
   });
 
+  it('continues processing queued external dispatches after the active handler rejects', async () => {
+    const deferred = createDeferred<void>();
+
+    const flow = createFlow({
+      name: 'queued-dispatch-after-error',
+      context: z.object({ count: z.number(), order: z.array(z.string()) }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { count: 0, order: [] },
+    })
+      .step('idle', ({ on }) => [
+        on('FIRST', {}, async ({ ctx, effect, update }) => {
+          update({ order: [...ctx.order, 'first:start'] });
+          await effect('first', () => deferred.promise);
+        }),
+        on('SECOND', {}, ({ ctx, update }) => {
+          update({
+            count: ctx.count + 1,
+            order: [...ctx.order, 'second'],
+          });
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+    const firstDispatchPromise = instance.dispatch({ type: 'FIRST' });
+
+    await Promise.resolve();
+
+    const secondDispatchPromise = instance.dispatch({ type: 'SECOND' });
+
+    deferred.reject(new Error('first failed'));
+
+    await expect(firstDispatchPromise).rejects.toThrow('first failed');
+    await expect(secondDispatchPromise).resolves.toBeUndefined();
+
+    expect(instance.getSnapshot().context).toEqual({
+      count: 1,
+      order: ['first:start', 'second'],
+    });
+    expect(instance.getSnapshot().pendingEffects).toEqual([]);
+    expect(instance.getSnapshot().lastEvent).toEqual({ type: 'SECOND' });
+  });
+
+  it('settles queued external dispatches without running them after destroy', async () => {
+    const deferred = createDeferred<void>();
+
+    const flow = createFlow({
+      name: 'queued-dispatch-destroy',
+      context: z.object({ count: z.number(), order: z.array(z.string()) }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { count: 0, order: [] },
+    })
+      .step('idle', ({ on }) => [
+        on('FIRST', {}, async ({ ctx, effect, update }) => {
+          update({ order: [...ctx.order, 'first:start'] });
+          await effect('first', () => deferred.promise);
+          update((currentContext) => ({
+            count: currentContext.count + 1,
+            order: [...currentContext.order, 'first:end'],
+          }));
+        }),
+        on('SECOND', {}, ({ ctx, update }) => {
+          update({
+            count: ctx.count + 1,
+            order: [...ctx.order, 'second'],
+          });
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+    const firstDispatchPromise = instance.dispatch({ type: 'FIRST' });
+
+    await Promise.resolve();
+
+    const secondDispatchPromise = instance.dispatch({ type: 'SECOND' });
+
+    instance.destroy();
+
+    deferred.resolve();
+    await Promise.all([firstDispatchPromise, secondDispatchPromise]);
+
+    expect(instance.getSnapshot().context).toEqual({
+      count: 0,
+      order: ['first:start'],
+    });
+    expect(instance.getSnapshot().pendingEffects).toEqual([]);
+    expect(instance.getSnapshot().lastEvent).toEqual({ type: 'FIRST' });
+  });
+
   it('rejects start when an enter handler throws', async () => {
     const flow = createFlow({
       name: 'enter-throws',

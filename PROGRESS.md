@@ -25,6 +25,10 @@ Completed so far:
 - added snapshot subscription support for UI integration
 - added focused tests for validation, branching, async effects, and delayed transitions
 - added edge-case tests for re-entrant external dispatch queueing and self-transition timer cleanup
+- fixed queued external dispatch handling so later queued events still run after earlier failures
+- added lifecycle coverage for queued external dispatch settlement on destroy
+- added package README guidance for XState evaluation and current fit boundaries
+- added a demo overview panel that separates supported-now capabilities, runtime guarantees, and not-yet features
 - documented execution semantics and current capabilities in the README and docs
 - validated that the workspace passes focused tests, `pnpm typecheck`, `pnpm lint`, and `pnpm build`
 

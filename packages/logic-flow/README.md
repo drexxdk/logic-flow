@@ -25,6 +25,38 @@ Type exports:
 
 Anything else in the source should be treated as internal implementation detail.
 
+## When It Fits
+
+`logic-flow` is a good fit today when you need:
+
+- flat named workflows with explicit state transitions
+- typed event payloads validated with Zod
+- state-local event declarations instead of global event maps
+- async request lifecycles driven by `enter(...)`, `effect(...)`, and `requestStep(...)`
+- delayed transitions and snapshot subscriptions for UI integration
+
+It is not the right tool yet when your workflow depends on:
+
+- child machines or actor-style composition
+- exit hooks or a richer cancellation model for long-running work
+- hierarchical, history, or parallel state semantics
+- persistence, restore, or dedicated devtools support
+
+If those missing features are the reason you use XState today, keep XState for that slice or treat `logic-flow` as a narrower workflow tool for now.
+
+## XState Evaluation
+
+For teams comparing this package to XState, the current translation is roughly:
+
+- machine states -> `states: [...]` plus `.step(...)`
+- `assign(...)` -> `update(...)`
+- guarded branching -> normal TypeScript `if` / `else`
+- `send(...)` to the same machine -> flow-api `dispatch(...)`
+- delayed `after` transitions -> `schedule(...)`
+- invoked request state -> `enter(...)` with `effect(...)`, or `requestStep(...)` for the common success/failure pattern
+
+The main difference is authoring style: `logic-flow` keeps branching and workflow logic in ordinary functions instead of moving most behavior into a configuration object.
+
 ## Authoring Model
 
 Flows define shared context and state names up front, then attach state-local event handlers and `enter(...)` hooks step by step.

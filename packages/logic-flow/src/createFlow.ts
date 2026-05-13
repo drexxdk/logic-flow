@@ -172,6 +172,18 @@ interface IExecutionContext {
   active: boolean;
 }
 
+interface IQueuedDispatch<TEvent> {
+  readonly event: TEvent;
+  readonly completion: IDispatchCompletion;
+}
+
+interface IDispatchCompletion {
+  pendingCount: number;
+  settled: boolean;
+  resolve(): void;
+  reject(error: unknown): void;
+}
+
 interface ICreateFlowConfig<
   TContextSchema extends z.ZodTypeAny,
   TStates extends readonly [string, ...string[]],
@@ -427,10 +439,11 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     (snapshot: FlowSnapshot<TContext, TState, TEvent>) => void
   >();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
-  private readonly queue: TEvent[] = [];
+  private readonly queue: IQueuedDispatch<TEvent>[] = [];
   private isDestroyed = false;
   private hasStarted = false;
   private isProcessing = false;
+  private currentCompletion: IDispatchCompletion | undefined;
   private startPromise: Promise<FlowSnapshot<TContext, TState, TEvent>> | undefined;
   private snapshot: FlowSnapshot<TContext, TState, TEvent>;
 
@@ -523,25 +536,95 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
       ? eventOrDefinition.create(payload as never)
       : eventOrDefinition;
 
-    this.queue.push(this.definition.validateEvent(event));
+    return await this.enqueueExternalDispatch(this.definition.validateEvent(event));
+  }
 
-    if (this.isProcessing) {
-      return;
+  private enqueueExternalDispatch(event: TEvent): Promise<void> {
+    const { completion, promise } = this.createDispatchCompletion();
+
+    this.enqueueValidatedDispatch(event, completion);
+
+    return promise;
+  }
+
+  private createDispatchCompletion(): {
+    completion: IDispatchCompletion;
+    promise: Promise<void>;
+  } {
+    let resolve!: () => void;
+    let reject!: (error: unknown) => void;
+
+    const promise = new Promise<void>((nextResolve, nextReject) => {
+      resolve = nextResolve;
+      reject = nextReject;
+    });
+
+    return {
+      completion: {
+        pendingCount: 0,
+        settled: false,
+        resolve,
+        reject,
+      },
+      promise,
+    };
+  }
+
+  private enqueueValidatedDispatch(event: TEvent, completion: IDispatchCompletion): void {
+    completion.pendingCount += 1;
+    this.queue.push({ event, completion });
+
+    if (!this.isProcessing) {
+      this.isProcessing = true;
+      void this.processQueue();
     }
+  }
 
-    this.isProcessing = true;
-
+  private async processQueue(): Promise<void> {
     try {
       while (!this.isDestroyed && this.queue.length > 0) {
-        const nextEvent = this.queue.shift();
+        const nextDispatch = this.queue.shift();
 
-        if (nextEvent) {
-          await this.handleEvent(nextEvent);
+        if (!nextDispatch) {
+          continue;
+        }
+
+        this.currentCompletion = nextDispatch.completion;
+
+        try {
+          await this.handleEvent(nextDispatch.event);
+          this.resolveDispatchCompletion(nextDispatch.completion);
+        } catch (error) {
+          this.rejectDispatchCompletion(nextDispatch.completion, error);
+        } finally {
+          this.currentCompletion = undefined;
         }
       }
     } finally {
       this.isProcessing = false;
     }
+  }
+
+  private resolveDispatchCompletion(completion: IDispatchCompletion): void {
+    if (completion.settled) {
+      return;
+    }
+
+    completion.pendingCount -= 1;
+
+    if (completion.pendingCount === 0) {
+      completion.settled = true;
+      completion.resolve();
+    }
+  }
+
+  private rejectDispatchCompletion(completion: IDispatchCompletion, error: unknown): void {
+    if (completion.settled) {
+      return;
+    }
+
+    completion.settled = true;
+    completion.reject(error);
   }
 
   public destroy(): void {
@@ -550,6 +633,15 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     }
 
     this.isDestroyed = true;
+    const queuedCompletions = new Set(this.queue.map(({ completion }) => completion));
+
+    queuedCompletions.forEach((completion) => {
+      if (!completion.settled) {
+        completion.settled = true;
+        completion.resolve();
+      }
+    });
+
     this.queue.length = 0;
     this.clearTimers();
     this.snapshot = {
@@ -687,11 +779,19 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
 
       execution.active = false;
 
-      if (isFlowEventDefinition(nextEventOrRegistration)) {
-        return this.dispatch(nextEventOrRegistration.create(payload as never) as TEvent);
+      const nextEvent = isFlowEventDefinition(nextEventOrRegistration)
+        ? (nextEventOrRegistration.create(payload as never) as TEvent)
+        : (nextEventOrRegistration as TEvent);
+
+      if (this.isProcessing && this.currentCompletion) {
+        this.enqueueValidatedDispatch(
+          this.definition.validateEvent(nextEvent),
+          this.currentCompletion,
+        );
+        return Promise.resolve();
       }
 
-      return this.dispatch(nextEventOrRegistration as TEvent);
+      return this.dispatch(nextEvent);
     }) as FlowApi<TContext, TEvent, TState>['dispatch'];
 
     return {

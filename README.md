@@ -229,8 +229,10 @@ The current runtime contract is intentionally small but now reasonably explicit:
 
 - `goto(...)` is terminal inside a handler or `enter(...)` hook
 - flow-api `dispatch(...)` is also terminal inside a handler or `enter(...)` hook
+- external `instance.dispatch(...)` and `instance.send(...)` calls are queued in order while another event is running
+- queued external events still continue after an earlier external event rejects, and each call settles independently
 - `start()` runs the initial enter lifecycle once per instance
-- `destroy()` makes the instance inert: queued work, timers, and in-flight async completions stop mutating the snapshot
+- `destroy()` makes the instance inert: queued work, timers, and in-flight async completions stop mutating the snapshot, and queued external calls that have not started settle without running
 - `schedule(...)` work is owned by the active state execution and is cleared on cancellation, transition, or destroy
 - thrown handler or `enter(...)` errors reject the corresponding `dispatch(...)` or `start()` call
 - rejected `effect(...)` work propagates failure but still clears `pendingEffects`
@@ -252,7 +254,7 @@ This is the practical support level today.
 | Async effects                   | Supported | `effect(...)` tracks pending work                                               |
 | Delayed transitions             | Supported | `schedule(...)` supports delayed work scoped to state execution                 |
 | Snapshot subscriptions          | Supported | `getSnapshot()` and `subscribe(...)` are available                              |
-| Lifecycle disposal              | Supported | `destroy()` clears timers and prevents stale updates                            |
+| Lifecycle disposal              | Supported | `destroy()` clears timers, prevents stale updates, and settles queued calls     |
 | ESLint authoring rule           | Supported | `logic-flow/terminal-goto`                                                      |
 | Child flows / actors            | Not yet   | Planned as the next major capability after lifecycle hardening                  |
 | Exit hooks / cancellation model | Not yet   | Current teardown behavior is instance-level, not full state-scoped cancellation |
