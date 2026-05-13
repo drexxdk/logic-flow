@@ -37,6 +37,27 @@ enter(async ({ dispatch, effect }) => {
 });
 ```
 
+When the event is defined in the same step, you can also dispatch through the local `on(...)` registration handle instead of building a raw event object.
+
+```ts
+.step('publishing', ({ enter, on, states }) => {
+  const published = on('PUBLISHED', {}, states.done, ({ goto }) => {
+    goto(states.done);
+  });
+
+  return [
+    enter(async ({ dispatch, effect }) => {
+      await effect('publishRequest', async () => {
+        await wait(1000);
+      });
+
+      await dispatch(published);
+    }),
+    published,
+  ];
+})
+```
+
 That event is then handled by the matching `on(...)` registration for the current state.
 
 ## Terminal Operations Inside Flow Logic
@@ -62,6 +83,17 @@ enter(async ({ dispatch }) => {
 
   // unreachable in the same flow execution context
   await dispatch({ type: 'PUBLISHED' });
+});
+```
+
+The same rule applies when dispatching through a registration handle:
+
+```ts
+enter(async ({ dispatch }) => {
+  await dispatch(published);
+
+  // unreachable in the same flow execution context
+  await dispatch(published);
 });
 ```
 
@@ -151,6 +183,21 @@ enter(async ({ dispatch, effect }) => {
     await dispatch({ type: 'PUBLISHED' });
   } catch {
     await dispatch({ type: 'FAILED', message: 'Publish request failed.' });
+  }
+});
+```
+
+The same guidance applies to the registration-handle form:
+
+```ts
+enter(async ({ dispatch, effect }) => {
+  try {
+    await effect('publishRequest', async () => {
+      await wait(1000);
+    });
+    await dispatch(published);
+  } catch {
+    await dispatch(failed, { message: 'Publish request failed.' });
   }
 });
 ```

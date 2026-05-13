@@ -246,6 +246,7 @@ Current demos include:
 
 - a rename flow with validation, async save behavior, and delayed success handling
 - a publishing flow with plain branching between review and publish paths
+- a sync flow that reuses the same success and failure event contracts across initial and retry states
 
 ## Development
 
