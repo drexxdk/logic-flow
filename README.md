@@ -29,6 +29,15 @@ The first version currently includes:
 
 This is intentionally narrow. It is a proof of concept for the authoring model, not a complete replacement for advanced statechart features.
 
+## Public API Contract
+
+The current package entrypoint is intentionally small. Treat this as the supported `0.1.x` contract:
+
+- runtime values: `createFlow`, `defineEvent`, `requestStep`, and `FlowInstance`
+- public types: `FlowDefinition`, `FlowEvent`, `FlowEventDefinition`, `FlowInstanceOptions`, and `FlowSnapshot`
+
+Everything else in the runtime implementation should be considered internal, even if it appears in source-level examples or can be inferred from the code. Higher-level helpers should keep building on top of this surface instead of reaching into builder internals.
+
 ## API Shape
 
 Flows define shared context and the list of state names up front. Events are declared inside the step that handles them, and you can optionally declare transition targets up front for stronger editor help.

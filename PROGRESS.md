@@ -20,8 +20,11 @@ Completed so far:
 - added `.step('done')` support for empty states without weakening event inference
 - added `requestStep(...)` as the first higher-level helper for async request states
 - narrowed the top-level public export surface to consumer-facing types and values only
+- documented the intended `0.1.x` public API contract and package entrypoint surface
+- audited the publishable package contents with `pnpm --filter logic-flow pack --dry-run`
 - added snapshot subscription support for UI integration
 - added focused tests for validation, branching, async effects, and delayed transitions
+- added edge-case tests for re-entrant external dispatch queueing and self-transition timer cleanup
 - documented execution semantics and current capabilities in the README and docs
 - validated that the workspace passes focused tests, `pnpm typecheck`, `pnpm lint`, and `pnpm build`
 

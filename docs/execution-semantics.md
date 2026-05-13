@@ -124,6 +124,8 @@ await instance.send({ type: 'FAILED', message: 'Network down' });
 await instance.send(failed, { message: 'Network down' });
 ```
 
+If external code sends another event while the flow is already processing one, that later event is queued and handled after the active execution finishes. That includes re-entrant sends triggered by subscription callbacks or other observer code reacting to snapshot updates.
+
 ## Instance Lifecycle
 
 `FlowInstance` has two important lifecycle boundaries:
@@ -159,6 +161,8 @@ That means scheduled tasks are cleared when:
 - the instance is destroyed
 
 This keeps delayed work scoped to the state that created it, instead of allowing old timers to fire after the flow has already moved on.
+
+The same cleanup happens on self-transitions. Re-entering a state clears the previously owned scheduled work before the new enter lifecycle registers replacement timers.
 
 ## Transition Metadata
 

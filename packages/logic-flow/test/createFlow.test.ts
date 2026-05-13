@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import * as logicFlow from '../src';
 import { createFlow, defineEvent, requestStep } from '../src';
 
 function createDeferred<T>() {
@@ -16,6 +17,12 @@ function createDeferred<T>() {
 }
 
 describe('createFlow', () => {
+  it('exposes only the supported runtime exports from the package entrypoint', () => {
+    expect(Object.keys(logicFlow).sort()).toEqual(
+      ['FlowInstance', 'createFlow', 'defineEvent', 'requestStep'].sort(),
+    );
+  });
+
   it('validates event payloads with zod', async () => {
     const flow = createFlow({
       name: 'counter',
@@ -678,6 +685,62 @@ describe('createFlow', () => {
     });
   });
 
+  it('queues re-entrant external dispatches triggered during subscription notifications', async () => {
+    const firstEventDeferred = createDeferred<void>();
+
+    const flow = createFlow({
+      name: 'subscription-reentrant-dispatch',
+      context: z.object({ count: z.number(), order: z.array(z.string()) }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { count: 0, order: [] },
+    })
+      .step('idle', ({ on }) => [
+        on('FIRST', {}, async ({ ctx, effect, update }) => {
+          update({ order: [...ctx.order, 'first:start'] });
+          await effect('first', () => firstEventDeferred.promise);
+          update((currentContext) => ({
+            count: currentContext.count + 1,
+            order: [...currentContext.order, 'first:end'],
+          }));
+        }),
+        on('SECOND', {}, ({ ctx, update }) => {
+          update({
+            count: ctx.count + 1,
+            order: [...ctx.order, 'second'],
+          });
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+    let hasQueuedSecond = false;
+
+    instance.subscribe((snapshot) => {
+      if (!hasQueuedSecond && snapshot.lastEvent?.type === 'FIRST') {
+        hasQueuedSecond = true;
+        void instance.dispatch({ type: 'SECOND' });
+      }
+    });
+
+    const firstDispatchPromise = instance.dispatch({ type: 'FIRST' });
+
+    await Promise.resolve();
+
+    expect(instance.getSnapshot().context).toEqual({
+      count: 0,
+      order: ['first:start'],
+    });
+
+    firstEventDeferred.resolve();
+    await firstDispatchPromise;
+
+    expect(instance.getSnapshot().context).toEqual({
+      count: 2,
+      order: ['first:start', 'first:end', 'second'],
+    });
+  });
+
   it('does not rerun enter handlers when start is called twice', async () => {
     const order: string[] = [];
 
@@ -778,6 +841,46 @@ describe('createFlow', () => {
 
     expect(instance.getSnapshot().state).toBe('done');
     expect(instance.getSnapshot().context.closedByDelay).toBe(false);
+
+    vi.useRealTimers();
+  });
+
+  it('clears previously scheduled work before re-entering the same state', async () => {
+    vi.useFakeTimers();
+
+    const flow = createFlow({
+      name: 'schedule-self-transition-clear',
+      context: z.object({ firedCount: z.number() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { firedCount: 0 },
+    })
+      .step('idle', ({ enter, on, states }) => [
+        enter(({ schedule, update }) => {
+          schedule(100, ({ getSnapshot: readSnapshot, update: delayedUpdate }) => {
+            delayedUpdate({ firedCount: readSnapshot().context.firedCount + 1 });
+          });
+          update({ firedCount: 0 });
+        }),
+        on('REARM', {}, states.idle, ({ goto }) => {
+          goto(states.idle);
+        }),
+      ])
+      .build();
+
+    const instance = flow.createInstance();
+
+    await instance.start();
+    await vi.advanceTimersByTimeAsync(50);
+
+    await instance.dispatch({ type: 'REARM' });
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(instance.getSnapshot().context.firedCount).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(instance.getSnapshot().context.firedCount).toBe(1);
 
     vi.useRealTimers();
   });

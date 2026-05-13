@@ -2,6 +2,21 @@
   "name": "logic-flow",
   "version": "0.1.0",
   "description": "A code-first workflow runtime for TypeScript and Zod.",
+  "keywords": [
+    "workflow",
+    "state-machine",
+    "typescript",
+    "zod",
+    "xstate"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/drexxdk/logic-flow.git"
+  },
+  "homepage": "https://github.com/drexxdk/logic-flow#readme",
+  "bugs": {
+    "url": "https://github.com/drexxdk/logic-flow/issues"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
