@@ -59,31 +59,46 @@ export const renameFlow = createFlow({
       goto(states.saving);
     }),
   ])
-  .step('saving', ({ enter, on, states }) => [
-    enter(async ({ ctx, dispatch, effect }) => {
-      try {
-        await effect('renameRequest', async () => {
-          await wait(800);
+  .step('saving', ({ enter, on, states }) => {
+    const failed = on(
+      'FAILED',
+      { message: z.string() },
+      states.editing,
+      ({ event, goto, update }) => {
+        update({ error: event.message });
+        goto(states.editing);
+      },
+    );
+    const saved = on(
+      'SAVED',
+      { heading: z.string() },
+      states.success,
+      ({ event, goto, update }) => {
+        update({
+          savedHeading: event.heading,
+          heading: event.heading,
+          modalOpen: false,
+          error: undefined,
         });
-        await dispatch({ type: 'SAVED', heading: ctx.heading.trim() });
-      } catch {
-        await dispatch({ type: 'FAILED', message: 'Saving failed. Try again.' });
-      }
-    }),
-    on('FAILED', { message: z.string() }, states.editing, ({ event, goto, update }) => {
-      update({ error: event.message });
-      goto(states.editing);
-    }),
-    on('SAVED', { heading: z.string() }, states.success, ({ event, goto, update }) => {
-      update({
-        savedHeading: event.heading,
-        heading: event.heading,
-        modalOpen: false,
-        error: undefined,
-      });
-      goto(states.success);
-    }),
-  ])
+        goto(states.success);
+      },
+    );
+
+    return [
+      enter(async ({ ctx, dispatch, effect }) => {
+        try {
+          await effect('renameRequest', async () => {
+            await wait(800);
+          });
+          await dispatch(saved, { heading: ctx.heading.trim() });
+        } catch {
+          await dispatch(failed, { message: 'Saving failed. Try again.' });
+        }
+      }),
+      failed,
+      saved,
+    ];
+  })
   .step('success', ({ enter, states }) =>
     enter(states.closed, ({ schedule }) => {
       schedule(1200, ({ goto: delayedGoto }) => {

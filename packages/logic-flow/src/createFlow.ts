@@ -46,7 +46,11 @@ interface FlowApi<
   readonly states: FlowStateRefs<TState>;
   update(patch: FlowContextPatch<TContext>): TContext;
   goto(state: TGotoState): never;
-  dispatch<TEvent extends FlowEvent>(event: TEvent): Promise<void>;
+  dispatch<TEvent extends TAllEvents>(event: TEvent): Promise<void>;
+  dispatch<TType extends string, TShape extends EventShape, TTargets extends readonly TState[]>(
+    registration: EventRegistration<TState, TType, TShape, TTargets>,
+    ...args: EventPayloadArgs<TShape>
+  ): Promise<void>;
   effect<TResult>(name: string, task: () => Awaitable<TResult>): Promise<TResult>;
   schedule(
     ms: number,
@@ -90,17 +94,25 @@ type FlowEnterHandler<
 > = (api: FlowEnterApi<TContext, TEvent, TState, TGotoState>) => Awaitable<void>;
 
 type EventShape = z.ZodRawShape;
+type EventPayload<TShape extends EventShape> = z.infer<z.ZodObject<TShape>>;
+type EventPayloadArgs<TShape extends EventShape> = keyof TShape extends never
+  ? [] | [payload: EventPayload<TShape>]
+  : [payload: EventPayload<TShape>];
 
 type EventFromShape<TType extends string, TShape extends EventShape> = {
   type: TType;
 } & z.infer<z.ZodObject<TShape>>;
+
+interface EventFactory<TType extends string, TShape extends EventShape> {
+  create(payload?: EventPayload<TShape>): EventFromShape<TType, TShape>;
+}
 
 interface EventRegistration<
   TState extends string,
   TType extends string,
   TShape extends EventShape,
   TTargets extends FlowTransitionTargets<TState>,
-> {
+> extends EventFactory<TType, TShape> {
   kind: 'event';
   type: TType;
   schema: z.ZodObject<{ type: z.ZodLiteral<TType> } & TShape>;
@@ -437,9 +449,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     }
   }
 
-  public async dispatch<TDispatchedEvent extends FlowEvent>(
-    event: TDispatchedEvent,
-  ): Promise<void> {
+  public async dispatch<TDispatchedEvent extends TEvent>(event: TDispatchedEvent): Promise<void> {
     if (this.isDestroyed) {
       return;
     }
@@ -598,6 +608,25 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
       return !this.isDestroyed;
     };
 
+    const dispatch: FlowApi<TContext, TEvent, TState>['dispatch'] = ((
+      nextEventOrRegistration:
+        | TEvent
+        | EventRegistration<TState, string, EventShape, readonly TState[]>,
+      payload?: unknown,
+    ) => {
+      if (!assertActive()) {
+        return Promise.resolve();
+      }
+
+      execution.active = false;
+
+      if (isEventRegistration<TState>(nextEventOrRegistration)) {
+        return this.dispatch(nextEventOrRegistration.create(payload as never) as TEvent);
+      }
+
+      return this.dispatch(nextEventOrRegistration);
+    }) as FlowApi<TContext, TEvent, TState>['dispatch'];
+
     return {
       get ctx() {
         return readSnapshot().context;
@@ -626,14 +655,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
 
         throw new FlowTransitionSignal(state);
       },
-      dispatch: <TDispatchedEvent extends FlowEvent>(nextEvent: TDispatchedEvent) => {
-        if (!assertActive()) {
-          return Promise.resolve();
-        }
-
-        execution.active = false;
-        return this.dispatch(nextEvent);
-      },
+      dispatch,
       effect: <TResult>(name: string, task: () => Awaitable<TResult>) => {
         if (!assertActive()) {
           return Promise.resolve(undefined as TResult);
@@ -870,6 +892,12 @@ function createRequestStepEventRegistration<
   )(config.type, config.shape, config.target, handler);
 }
 
+function isEventRegistration<TState extends string>(
+  value: unknown,
+): value is EventRegistration<TState, string, EventShape, readonly TState[]> {
+  return typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'event';
+}
+
 export function requestStep<
   TContext,
   TAllEvents extends FlowEvent,
@@ -894,27 +922,21 @@ export function requestStep<
   EventRegistration<TState, TSuccessType, TSuccessShape, readonly TState[]>,
   EventRegistration<TState, TFailureType, TFailureShape, readonly TState[]>,
 ] {
-  type TSuccessEvent = EventFromShape<TSuccessType, TSuccessShape>;
-  type TFailureEvent = EventFromShape<TFailureType, TFailureShape>;
+  const success = createRequestStepEventRegistration(api.on, config.success);
+  const failure = createRequestStepEventRegistration(api.on, config.failure);
 
   return [
     api.enter(async (enterApi) => {
       try {
         const successPayload = await config.run(enterApi);
-        await enterApi.dispatch({
-          type: config.success.type,
-          ...successPayload,
-        } as TSuccessEvent);
+        await enterApi.dispatch(success, successPayload);
       } catch (error) {
         const failurePayload = await config.failure.mapError(error, enterApi);
-        await enterApi.dispatch({
-          type: config.failure.type,
-          ...failurePayload,
-        } as TFailureEvent);
+        await enterApi.dispatch(failure, failurePayload);
       }
     }),
-    createRequestStepEventRegistration(api.on, config.success),
-    createRequestStepEventRegistration(api.on, config.failure),
+    success,
+    failure,
   ] as const;
 }
 
@@ -968,6 +990,11 @@ export function createFlow<
             schema: createEventSchema(type, shape),
             targets: normalizeTargets(options as FlowTransitionInput<TState, readonly TState[]>),
             handler,
+            create: (payload?: EventPayload<typeof shape>) =>
+              ({
+                type,
+                ...(payload ?? {}),
+              }) as EventFromShape<typeof type, typeof shape>,
           } as EventRegistration<TState, typeof type, typeof shape, readonly TState[]>;
         }) as IStepRegistrar<TContext, TAllEvents, TState>['on'],
         enter: ((

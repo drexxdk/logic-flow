@@ -218,6 +218,49 @@ describe('createFlow', () => {
     });
   });
 
+  it('types internal dispatch against registered events', () => {
+    createFlow({
+      name: 'typed-internal-dispatch',
+      context: z.object({ failed: z.boolean() }),
+      states: ['idle', 'saving', 'done'] as const,
+      initial: 'idle',
+      initialContext: { failed: false },
+    })
+      .step('idle', ({ on, states }) =>
+        on('SAVE', {}, states.saving, ({ goto }) => {
+          goto(states.saving);
+        }),
+      )
+      .step('saving', ({ enter, on, states }) => {
+        const failed = on(
+          'FAILED',
+          { message: z.string() },
+          states.idle,
+          ({ event, goto, update }) => {
+            update({ failed: event.message.length > 0 });
+            goto(states.idle);
+          },
+        );
+
+        return [
+          enter(({ dispatch }) => {
+            const assertDispatchTypes = () => {
+              // @ts-expect-error FAILED requires its message payload.
+              void dispatch(failed);
+
+              // @ts-expect-error UNKNOWN is not part of the flow event union.
+              void dispatch({ type: 'UNKNOWN' });
+            };
+
+            void assertDispatchTypes;
+            return dispatch(failed, { message: 'typed failure' });
+          }),
+          failed,
+        ];
+      })
+      .step('done');
+  });
+
   it('transitions immediately when goto is called', async () => {
     const order: string[] = [];
 
@@ -257,14 +300,13 @@ describe('createFlow', () => {
       initial: 'idle',
       initialContext: { failed: false },
     })
-      .step('idle', ({ enter, on, states }) => [
-        enter(({ dispatch }) =>
-          dispatch({ type: 'FINISH' }).then(() => dispatch({ type: 'FINISH' })),
-        ),
-        on('FINISH', {}, { targets: [states.done] as const }, ({ goto }) => {
+      .step('idle', ({ enter, on, states }) => {
+        const finish = on('FINISH', {}, { targets: [states.done] as const }, ({ goto }) => {
           goto(states.done);
-        }),
-      ])
+        });
+
+        return [enter(({ dispatch }) => dispatch(finish).then(() => dispatch(finish))), finish];
+      })
       .step('done', () => [])
       .build();
 
@@ -467,16 +509,20 @@ describe('createFlow', () => {
           goto(states.saving);
         }),
       ])
-      .step('saving', ({ enter, on, states }) => [
-        enter(async ({ effect, dispatch }) => {
-          await effect('persist', () => deferred.promise);
-          await dispatch({ type: 'SAVED' });
-        }),
-        on('SAVED', {}, { targets: [states.done] as const }, ({ goto, update }) => {
+      .step('saving', ({ enter, on, states }) => {
+        const saved = on('SAVED', {}, { targets: [states.done] as const }, ({ goto, update }) => {
           update({ saved: true });
           goto(states.done);
-        }),
-      ])
+        });
+
+        return [
+          enter(async ({ effect, dispatch }) => {
+            await effect('persist', () => deferred.promise);
+            await dispatch(saved);
+          }),
+          saved,
+        ];
+      })
       .step('done', () => [])
       .build();
 
