@@ -1,3 +1,5 @@
+import { CodeComparison } from './CodeComparison';
+import { renameComparison } from './comparisonExamples';
 import { renameFlow } from './renameFlow';
 import { SnapshotBlock } from './SnapshotBlock';
 import { useFlow } from './useFlow';
@@ -14,7 +16,14 @@ export function RenameDemo() {
           Shows validation, async effects, internal events, and delayed transitions without guard
           arrays.
         </p>
+        <p className="mapping-note">
+          XState concept -&gt; logic-flow equivalent: modal machine with `assign(...)`, `invoke`,
+          and delayed success close -&gt; named steps with `update(...)`, `effect(...)`, internal
+          `dispatch(...)`, and `schedule(...)`.
+        </p>
       </header>
+
+      <CodeComparison example={renameComparison} />
 
       <div className="controls">
         <button onClick={() => send({ type: 'OPEN' })}>Open modal</button>

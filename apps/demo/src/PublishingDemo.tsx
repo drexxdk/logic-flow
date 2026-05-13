@@ -1,3 +1,5 @@
+import { CodeComparison } from './CodeComparison';
+import { publishingComparison } from './comparisonExamples';
 import { publishingFlow } from './publishingFlow';
 import { SnapshotBlock } from './SnapshotBlock';
 import { useFlow } from './useFlow';
@@ -14,7 +16,14 @@ export function PublishingDemo() {
           Shows plain if/else branching where submit can route to review or publish without encoded
           guard arrays.
         </p>
+        <p className="mapping-note">
+          XState concept -&gt; logic-flow equivalent: guarded transitions from draft to review or
+          publish -&gt; a single event handler with normal `if` / `else` branching and typed
+          `goto(...)` targets.
+        </p>
       </header>
+
+      <CodeComparison example={publishingComparison} />
 
       <div className="controls">
         <button onClick={() => send({ type: 'SUBMIT' })} disabled={snapshot.state === 'publishing'}>

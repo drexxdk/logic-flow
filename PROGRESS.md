@@ -29,6 +29,7 @@ Completed so far:
 - added lifecycle coverage for queued external dispatch settlement on destroy
 - added package README guidance for XState evaluation and current fit boundaries
 - added a demo overview panel that separates supported-now capabilities, runtime guarantees, and not-yet features
+- added per-demo XState-to-logic-flow mapping captions in the demo UI
 - documented execution semantics and current capabilities in the README and docs
 - validated that the workspace passes focused tests, `pnpm typecheck`, `pnpm lint`, and `pnpm build`
 

@@ -1,3 +1,5 @@
+import { CodeComparison } from './CodeComparison';
+import { syncComparison } from './comparisonExamples';
 import { SnapshotBlock } from './SnapshotBlock';
 import { syncFlow } from './syncFlow';
 import { useFlow } from './useFlow';
@@ -14,7 +16,14 @@ export function SyncDemo() {
           Shows the same SYNCED and FAILED event contracts reused across initial sync and retry
           states while still using step-local registration handles for internal dispatch.
         </p>
+        <p className="mapping-note">
+          XState concept -&gt; logic-flow equivalent: reusable service result events shared across
+          retry states -&gt; `defineEvent(...)` contracts combined with step-local handlers and
+          internal `dispatch(...)`.
+        </p>
       </header>
+
+      <CodeComparison example={syncComparison} />
 
       <div className="controls">
         <button onClick={() => send({ type: 'START' })} disabled={snapshot.state !== 'idle'}>
