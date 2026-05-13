@@ -145,6 +145,31 @@ When you need to emit an internal event from the same step that defines it, you 
 
 This pattern is mainly for same-step internal dispatch where TypeScript cannot always infer a later event registration from a raw object literal. The registration handle stays local to the step, while the event type itself still becomes part of the flow's overall event union.
 
+When an event contract should be reused across multiple steps or helpers, you can define it once and pass that reusable definition to both `on(...)` and internal `dispatch(...)`.
+
+```ts
+import { createFlow, defineEvent } from 'logic-flow';
+
+const failed = defineEvent('FAILED', { message: z.string() });
+const synced = defineEvent('SYNCED', { itemCount: z.number().int().nonnegative() });
+
+.step('syncing', ({ enter, on, states }) => [
+  enter(async ({ dispatch }) => {
+    await dispatch(synced, { itemCount: 3 });
+  }),
+  on(failed, states.failed, ({ event, goto, update }) => {
+    update({ error: event.message });
+    goto(states.failed);
+  }),
+  on(synced, states.done, ({ event, goto, update }) => {
+    update({ itemCount: event.itemCount });
+    goto(states.done);
+  }),
+])
+```
+
+Inline `on('TYPE', shape, ...)` is still the default when an event is local to one step. `defineEvent(...)` is there for the cases where the same payload contract should be shared.
+
 For the common "enter a loading state, run async work, then dispatch typed success or failure events" pattern, `requestStep(...)` can hide the dispatch boilerplate while still returning normal registrations from the step:
 
 ```ts

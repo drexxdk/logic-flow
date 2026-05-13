@@ -47,8 +47,8 @@ interface FlowApi<
   update(patch: FlowContextPatch<TContext>): TContext;
   goto(state: TGotoState): never;
   dispatch<TEvent extends TAllEvents>(event: TEvent): Promise<void>;
-  dispatch<TType extends string, TShape extends EventShape, TTargets extends readonly TState[]>(
-    registration: EventRegistration<TState, TType, TShape, TTargets>,
+  dispatch<TType extends string, TShape extends EventShape>(
+    eventDefinition: FlowEventDefinition<TType, TShape>,
     ...args: EventPayloadArgs<TShape>
   ): Promise<void>;
   effect<TResult>(name: string, task: () => Awaitable<TResult>): Promise<TResult>;
@@ -107,15 +107,21 @@ interface EventFactory<TType extends string, TShape extends EventShape> {
   create(payload?: EventPayload<TShape>): EventFromShape<TType, TShape>;
 }
 
+export interface FlowEventDefinition<
+  TType extends string,
+  TShape extends EventShape,
+> extends EventFactory<TType, TShape> {
+  readonly type: TType;
+  readonly schema: z.ZodObject<{ type: z.ZodLiteral<TType> } & TShape>;
+}
+
 interface EventRegistration<
   TState extends string,
   TType extends string,
   TShape extends EventShape,
   TTargets extends FlowTransitionTargets<TState>,
-> extends EventFactory<TType, TShape> {
+> extends FlowEventDefinition<TType, TShape> {
   kind: 'event';
-  type: TType;
-  schema: z.ZodObject<{ type: z.ZodLiteral<TType> } & TShape>;
   targets: TTargets;
   handler: unknown;
 }
@@ -175,6 +181,41 @@ interface ICreateFlowConfig<
 
 interface IStepRegistrar<TContext, TAllEvents extends FlowEvent, TState extends string> {
   readonly states: FlowStateRefs<TState>;
+  on<const TType extends string, TShape extends EventShape>(
+    eventDefinition: FlowEventDefinition<TType, TShape>,
+    handler: FlowHandler<
+      TContext,
+      TAllEvents | EventFromShape<TType, TShape>,
+      TState,
+      EventFromShape<TType, TShape>
+    >,
+  ): EventRegistration<TState, TType, TShape, readonly TState[]>;
+  on<const TType extends string, TShape extends EventShape, const TTarget extends TState>(
+    eventDefinition: FlowEventDefinition<TType, TShape>,
+    target: TTarget,
+    handler: FlowHandler<
+      TContext,
+      TAllEvents | EventFromShape<TType, TShape>,
+      TState,
+      EventFromShape<TType, TShape>,
+      TTarget
+    >,
+  ): EventRegistration<TState, TType, TShape, readonly [TTarget]>;
+  on<
+    const TType extends string,
+    TShape extends EventShape,
+    const TTargets extends readonly TState[],
+  >(
+    eventDefinition: FlowEventDefinition<TType, TShape>,
+    targets: FlowTransitionInput<TState, TTargets>,
+    handler: FlowHandler<
+      TContext,
+      TAllEvents | EventFromShape<TType, TShape>,
+      TState,
+      EventFromShape<TType, TShape>,
+      TTargets[number]
+    >,
+  ): EventRegistration<TState, TType, TShape, TTargets>;
   on<const TType extends string, TShape extends EventShape>(
     type: TType,
     shape: TShape,
@@ -609,9 +650,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     };
 
     const dispatch: FlowApi<TContext, TEvent, TState>['dispatch'] = ((
-      nextEventOrRegistration:
-        | TEvent
-        | EventRegistration<TState, string, EventShape, readonly TState[]>,
+      nextEventOrRegistration: TEvent | FlowEventDefinition<string, EventShape>,
       payload?: unknown,
     ) => {
       if (!assertActive()) {
@@ -620,7 +659,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
 
       execution.active = false;
 
-      if (isEventRegistration<TState>(nextEventOrRegistration)) {
+      if (isFlowEventDefinition(nextEventOrRegistration)) {
         return this.dispatch(nextEventOrRegistration.create(payload as never) as TEvent);
       }
 
@@ -821,6 +860,21 @@ function createEventSchema<const TType extends string, TShape extends EventShape
   } as { type: z.ZodLiteral<TType> } & TShape);
 }
 
+export function defineEvent<const TType extends string, TShape extends EventShape>(
+  type: TType,
+  shape: TShape,
+): FlowEventDefinition<TType, TShape> {
+  return {
+    type,
+    schema: createEventSchema(type, shape),
+    create: (payload?: EventPayload<TShape>) =>
+      ({
+        type,
+        ...(payload ?? {}),
+      }) as EventFromShape<TType, TShape>,
+  };
+}
+
 function isTransitionOptions<TState extends string>(
   targetOrTargets: FlowTransitionInput<TState, readonly TState[]>,
 ): targetOrTargets is FlowTransitionOptions<TState, readonly TState[]> {
@@ -851,6 +905,16 @@ function normalizeStepRegistrations<TState extends string>(
   return Array.isArray(registrations) ? registrations : [registrations as StepRegistration<TState>];
 }
 
+function isFlowEventDefinition(value: unknown): value is FlowEventDefinition<string, EventShape> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    'schema' in value &&
+    'create' in value
+  );
+}
+
 function createRequestStepEventRegistration<
   TContext,
   TAllEvents extends FlowEvent,
@@ -869,7 +933,7 @@ function createRequestStepEventRegistration<
   >;
 
   if (!config.target) {
-    return on(config.type, config.shape, handler) as EventRegistration<
+    return on(defineEvent(config.type, config.shape), handler) as EventRegistration<
       TState,
       TType,
       TShape,
@@ -879,8 +943,7 @@ function createRequestStepEventRegistration<
 
   return (
     on as (
-      type: TType,
-      shape: TShape,
+      eventDefinition: FlowEventDefinition<TType, TShape>,
       targets: FlowTransitionInput<TState, readonly TState[]>,
       eventHandler: FlowHandler<
         TContext,
@@ -889,13 +952,7 @@ function createRequestStepEventRegistration<
         EventFromShape<TType, TShape>
       >,
     ) => EventRegistration<TState, TType, TShape, readonly TState[]>
-  )(config.type, config.shape, config.target, handler);
-}
-
-function isEventRegistration<TState extends string>(
-  value: unknown,
-): value is EventRegistration<TState, string, EventShape, readonly TState[]> {
-  return typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'event';
+  )(defineEvent(config.type, config.shape), config.target, handler);
 }
 
 export function requestStep<
@@ -973,29 +1030,48 @@ export function createFlow<
       const registrar: IStepRegistrar<TContext, TAllEvents, TState> = {
         states: stateRefs,
         on: ((
-          type: string,
-          shape: EventShape,
-          optionsOrHandler:
+          eventOrType: string | FlowEventDefinition<string, EventShape>,
+          shapeOrOptionsOrHandler:
+            | EventShape
+            | FlowTransitionInput<TState, readonly TState[]>
+            | FlowHandler<TContext, FlowEvent, TState, FlowEvent>,
+          optionsOrHandler?:
             | FlowTransitionInput<TState, readonly TState[]>
             | FlowHandler<TContext, FlowEvent, TState, FlowEvent>,
           maybeHandler?: FlowHandler<TContext, FlowEvent, TState, FlowEvent>,
         ) => {
-          const hasOptions = typeof maybeHandler === 'function';
-          const options = hasOptions ? optionsOrHandler : undefined;
-          const handler = hasOptions ? maybeHandler : optionsOrHandler;
+          const eventDefinition =
+            typeof eventOrType === 'string'
+              ? defineEvent(eventOrType, shapeOrOptionsOrHandler as EventShape)
+              : eventOrType;
+          const hasOptions =
+            typeof eventOrType === 'string'
+              ? typeof maybeHandler === 'function'
+              : typeof optionsOrHandler === 'function';
+          const handlerOrTargets =
+            typeof eventOrType === 'string'
+              ? optionsOrHandler
+              : hasOptions
+                ? shapeOrOptionsOrHandler
+                : shapeOrOptionsOrHandler;
+          const options = hasOptions ? handlerOrTargets : undefined;
+          const handler =
+            typeof eventOrType === 'string'
+              ? hasOptions
+                ? maybeHandler
+                : handlerOrTargets
+              : hasOptions
+                ? optionsOrHandler
+                : shapeOrOptionsOrHandler;
 
           return {
             kind: 'event',
-            type,
-            schema: createEventSchema(type, shape),
+            type: eventDefinition.type,
+            schema: eventDefinition.schema,
             targets: normalizeTargets(options as FlowTransitionInput<TState, readonly TState[]>),
             handler,
-            create: (payload?: EventPayload<typeof shape>) =>
-              ({
-                type,
-                ...(payload ?? {}),
-              }) as EventFromShape<typeof type, typeof shape>,
-          } as EventRegistration<TState, typeof type, typeof shape, readonly TState[]>;
+            create: eventDefinition.create,
+          } as EventRegistration<TState, string, EventShape, readonly TState[]>;
         }) as IStepRegistrar<TContext, TAllEvents, TState>['on'],
         enter: ((
           optionsOrHandler:

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { createFlow, requestStep } from '../src';
+import { createFlow, defineEvent, requestStep } from '../src';
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -259,6 +259,52 @@ describe('createFlow', () => {
         ];
       })
       .step('done');
+  });
+
+  it('supports reusable event definitions across registration and dispatch', async () => {
+    const failed = defineEvent('FAILED', { message: z.string() });
+    const synced = defineEvent('SYNCED', { itemCount: z.number().int().nonnegative() });
+
+    const flow = createFlow({
+      name: 'reusable-events',
+      context: z.object({ itemCount: z.number(), error: z.string().optional() }),
+      states: ['idle', 'syncing', 'failed', 'done'] as const,
+      initial: 'idle',
+      initialContext: { itemCount: 0 },
+    })
+      .step('idle', ({ on, states }) =>
+        on('START', {}, states.syncing, ({ goto }) => {
+          goto(states.syncing);
+        }),
+      )
+      .step('syncing', ({ enter, on, states }) => [
+        enter(({ dispatch }) => dispatch(synced, { itemCount: 2 })),
+        on(failed, states.failed, ({ event, goto, update }) => {
+          update({ error: event.message });
+          goto(states.failed);
+        }),
+        on(synced, states.done, ({ event, goto, update }) => {
+          update({ itemCount: event.itemCount, error: undefined });
+          goto(states.done);
+        }),
+      ])
+      .step('failed', () => [])
+      .step('done', () => [])
+      .build();
+
+    const instance = flow.createInstance();
+    const externalSyncedEvent: Parameters<typeof instance.send>[0] = synced.create({
+      itemCount: 4,
+    });
+
+    expect(externalSyncedEvent).toEqual({ type: 'SYNCED', itemCount: 4 });
+
+    await instance.dispatch({ type: 'START' });
+
+    expect(instance.getSnapshot()).toMatchObject({
+      state: 'done',
+      context: { itemCount: 2, error: undefined },
+    });
   });
 
   it('transitions immediately when goto is called', async () => {

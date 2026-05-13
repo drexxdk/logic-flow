@@ -1,7 +1,9 @@
-import { createFlow } from 'logic-flow';
+import { createFlow, defineEvent } from 'logic-flow';
 import { z } from 'zod';
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const syncFailed = defineEvent('FAILED', { message: z.string() });
+const syncCompleted = defineEvent('SYNCED', { itemCount: z.number().int().nonnegative() });
 
 async function runSyncRequest(shouldFail: boolean) {
   await wait(900);
@@ -38,24 +40,14 @@ export const syncFlow = createFlow({
     }),
   ])
   .step('syncing', ({ enter, on, states }) => {
-    const failed = on(
-      'FAILED',
-      { message: z.string() },
-      states.failed,
-      ({ event, goto, update }) => {
-        update({ error: event.message });
-        goto(states.failed);
-      },
-    );
-    const synced = on(
-      'SYNCED',
-      { itemCount: z.number().int().nonnegative() },
-      states.synced,
-      ({ event, goto, update }) => {
-        update({ syncedItems: event.itemCount, error: undefined });
-        goto(states.synced);
-      },
-    );
+    const failed = on(syncFailed, states.failed, ({ event, goto, update }) => {
+      update({ error: event.message });
+      goto(states.failed);
+    });
+    const synced = on(syncCompleted, states.synced, ({ event, goto, update }) => {
+      update({ syncedItems: event.itemCount, error: undefined });
+      goto(states.synced);
+    });
 
     return [
       enter(async ({ ctx, dispatch, effect }) => {
@@ -84,24 +76,14 @@ export const syncFlow = createFlow({
     }),
   ])
   .step('retrying', ({ enter, on, states }) => {
-    const failed = on(
-      'FAILED',
-      { message: z.string() },
-      states.failed,
-      ({ event, goto, update }) => {
-        update({ error: event.message });
-        goto(states.failed);
-      },
-    );
-    const synced = on(
-      'SYNCED',
-      { itemCount: z.number().int().nonnegative() },
-      states.synced,
-      ({ event, goto, update }) => {
-        update({ syncedItems: event.itemCount, error: undefined });
-        goto(states.synced);
-      },
-    );
+    const failed = on(syncFailed, states.failed, ({ event, goto, update }) => {
+      update({ error: event.message });
+      goto(states.failed);
+    });
+    const synced = on(syncCompleted, states.synced, ({ event, goto, update }) => {
+      update({ syncedItems: event.itemCount, error: undefined });
+      goto(states.synced);
+    });
 
     return [
       enter(async ({ ctx, dispatch, effect }) => {
