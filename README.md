@@ -116,6 +116,35 @@ This is a convenience for the common `createInstance()` + `start()` pattern in U
 
 For external callers, `instance.send(event)` is also available as a small alias for `instance.dispatch(event)`.
 
+When you need to emit an internal event from the same step that defines it, you can keep the event registration in a local variable and dispatch through that registration instead of assembling a raw `{ type: ... }` object.
+
+```ts
+.step('saving', ({ enter, on, states }) => {
+  const failed = on('FAILED', { message: z.string() }, states.editing, ({ event, goto }) => {
+    goto(states.editing);
+  });
+
+  const saved = on('SAVED', { heading: z.string() }, states.success, ({ event, goto }) => {
+    goto(states.success);
+  });
+
+  return [
+    enter(async ({ ctx, dispatch, effect }) => {
+      try {
+        await effect('saveRequest', saveHeading);
+        await dispatch(saved, { heading: ctx.heading.trim() });
+      } catch {
+        await dispatch(failed, { message: 'Save failed.' });
+      }
+    }),
+    failed,
+    saved,
+  ];
+})
+```
+
+This pattern is mainly for same-step internal dispatch where TypeScript cannot always infer a later event registration from a raw object literal. The registration handle stays local to the step, while the event type itself still becomes part of the flow's overall event union.
+
 For the common "enter a loading state, run async work, then dispatch typed success or failure events" pattern, `requestStep(...)` can hide the dispatch boilerplate while still returning normal registrations from the step:
 
 ```ts
