@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { createFlow } from '../src';
+import { createFlow, requestStep } from '../src';
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -136,6 +136,86 @@ describe('createFlow', () => {
     expect(instance.getSnapshot().state).toBe('closed');
 
     vi.useRealTimers();
+  });
+
+  it('supports requestStep for async request states without losing event inference', async () => {
+    const deferred = createDeferred<void>();
+
+    const flow = createFlow({
+      name: 'request-step',
+      context: z.object({ saved: z.boolean(), error: z.string().optional() }),
+      states: ['idle', 'saving', 'done'] as const,
+      initial: 'idle',
+      initialContext: { saved: false },
+    })
+      .step('idle', ({ on, states }) =>
+        on('SAVE', {}, states.saving, ({ goto, update }) => {
+          update({ error: undefined });
+          goto(states.saving);
+        }),
+      )
+      .step('saving', (api) =>
+        requestStep(api, {
+          run: async ({ effect }) => {
+            await effect('persist', () => deferred.promise);
+            return {};
+          },
+          success: {
+            type: 'SAVED',
+            shape: {},
+            target: api.states.done,
+            handle: ({ goto, update }) => {
+              update({ saved: true, error: undefined });
+              goto(api.states.done);
+            },
+          },
+          failure: {
+            type: 'FAILED',
+            shape: { message: z.string() },
+            target: api.states.idle,
+            mapError: () => ({ message: 'Save failed.' }),
+            handle: ({ event, goto, update }) => {
+              update({ error: event.message });
+              goto(api.states.idle);
+            },
+          },
+        }),
+      )
+      .step('done')
+      .build();
+
+    const instance = flow.createInstance();
+    const externalSuccessEvent: Parameters<typeof instance.send>[0] = { type: 'SAVED' };
+    const externalFailureEvent: Parameters<typeof instance.send>[0] = {
+      type: 'FAILED',
+      message: 'typed failure',
+    };
+
+    expect(externalSuccessEvent).toEqual({ type: 'SAVED' });
+    expect(externalFailureEvent).toEqual({ type: 'FAILED', message: 'typed failure' });
+
+    const dispatchPromise = instance.dispatch({ type: 'SAVE' });
+
+    await Promise.resolve();
+
+    expect(instance.getSnapshot().pendingEffects).toEqual(['persist']);
+
+    deferred.resolve();
+    await dispatchPromise;
+
+    expect(instance.getSnapshot()).toMatchObject({
+      state: 'done',
+      context: { saved: true, error: undefined },
+      pendingEffects: [],
+    });
+    expect(flow.transitions).toEqual({
+      idle: [{ kind: 'event', event: 'SAVE', targets: ['saving'] }],
+      saving: [
+        { kind: 'event', event: 'SAVED', targets: ['done'] },
+        { kind: 'event', event: 'FAILED', targets: ['idle'] },
+      ],
+      done: [],
+    });
   });
 
   it('transitions immediately when goto is called', async () => {

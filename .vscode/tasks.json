@@ -847,6 +847,54 @@
 			],
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "logic-flow test request step",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"test",
+				"--",
+				"test/createFlow.test.ts"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "logic-flow test request step retry",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"test",
+				"--",
+				"test/createFlow.test.ts"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "logic-flow build request step",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow build request step retry",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
 		}
 	]
 }

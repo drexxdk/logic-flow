@@ -1,6 +1,7 @@
 export {
   createFlow,
   FlowInstance,
+  requestStep,
   type FlowDefinition,
   type FlowEvent,
   type FlowInstanceOptions,

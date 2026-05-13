@@ -214,6 +214,69 @@ interface IStepRegistrar<TContext, TAllEvents extends FlowEvent, TState extends 
   ): EnterRegistration<TState, TTargets>;
 }
 
+interface RequestStepTransitionConfig<
+  TContext,
+  TAllEvents extends FlowEvent,
+  TState extends string,
+  TType extends string,
+  TShape extends EventShape,
+> {
+  type: TType;
+  shape: TShape;
+  target?: FlowTransitionInput<TState, readonly TState[]>;
+  handle: FlowHandler<
+    TContext,
+    TAllEvents | EventFromShape<TType, TShape>,
+    TState,
+    EventFromShape<TType, TShape>
+  >;
+}
+
+interface RequestStepFailureConfig<
+  TContext,
+  TAllEvents extends FlowEvent,
+  TState extends string,
+  TType extends string,
+  TShape extends EventShape,
+> extends RequestStepTransitionConfig<TContext, TAllEvents, TState, TType, TShape> {
+  mapError: (
+    error: unknown,
+    api: FlowEnterApi<TContext, TAllEvents, TState>,
+  ) => Awaitable<z.infer<z.ZodObject<TShape>>>;
+}
+
+interface RequestStepConfig<
+  TContext,
+  TAllEvents extends FlowEvent,
+  TState extends string,
+  TSuccessType extends string,
+  TSuccessShape extends EventShape,
+  TFailureType extends string,
+  TFailureShape extends EventShape,
+> {
+  run: (
+    api: FlowEnterApi<TContext, TAllEvents, TState>,
+  ) => Awaitable<z.infer<z.ZodObject<TSuccessShape>>>;
+  success: RequestStepTransitionConfig<
+    TContext,
+    | TAllEvents
+    | EventFromShape<TSuccessType, TSuccessShape>
+    | EventFromShape<TFailureType, TFailureShape>,
+    TState,
+    TSuccessType,
+    TSuccessShape
+  >;
+  failure: RequestStepFailureConfig<
+    TContext,
+    | TAllEvents
+    | EventFromShape<TSuccessType, TSuccessShape>
+    | EventFromShape<TFailureType, TFailureShape>,
+    TState,
+    TFailureType,
+    TFailureShape
+  >;
+}
+
 export interface FlowDefinition<TContext, TEvent extends FlowEvent, TState extends string> {
   readonly name: string;
   readonly initial: TState;
@@ -764,6 +827,95 @@ function normalizeStepRegistrations<TState extends string>(
   registrations: StepRegistrationResult<TState>,
 ): readonly StepRegistration<TState>[] {
   return Array.isArray(registrations) ? registrations : [registrations as StepRegistration<TState>];
+}
+
+function createRequestStepEventRegistration<
+  TContext,
+  TAllEvents extends FlowEvent,
+  TState extends string,
+  TType extends string,
+  TShape extends EventShape,
+>(
+  on: IStepRegistrar<TContext, TAllEvents, TState>['on'],
+  config: RequestStepTransitionConfig<TContext, TAllEvents, TState, TType, TShape>,
+): EventRegistration<TState, TType, TShape, readonly TState[]> {
+  const handler = config.handle as FlowHandler<
+    TContext,
+    TAllEvents | EventFromShape<TType, TShape>,
+    TState,
+    EventFromShape<TType, TShape>
+  >;
+
+  if (!config.target) {
+    return on(config.type, config.shape, handler) as EventRegistration<
+      TState,
+      TType,
+      TShape,
+      readonly TState[]
+    >;
+  }
+
+  return (
+    on as (
+      type: TType,
+      shape: TShape,
+      targets: FlowTransitionInput<TState, readonly TState[]>,
+      eventHandler: FlowHandler<
+        TContext,
+        TAllEvents | EventFromShape<TType, TShape>,
+        TState,
+        EventFromShape<TType, TShape>
+      >,
+    ) => EventRegistration<TState, TType, TShape, readonly TState[]>
+  )(config.type, config.shape, config.target, handler);
+}
+
+export function requestStep<
+  TContext,
+  TAllEvents extends FlowEvent,
+  TState extends string,
+  const TSuccessType extends string,
+  TSuccessShape extends EventShape,
+  const TFailureType extends string,
+  TFailureShape extends EventShape,
+>(
+  api: Pick<IStepRegistrar<TContext, TAllEvents, TState>, 'enter' | 'on'>,
+  config: RequestStepConfig<
+    TContext,
+    TAllEvents,
+    TState,
+    TSuccessType,
+    TSuccessShape,
+    TFailureType,
+    TFailureShape
+  >,
+): readonly [
+  EnterRegistration<TState, readonly TState[]>,
+  EventRegistration<TState, TSuccessType, TSuccessShape, readonly TState[]>,
+  EventRegistration<TState, TFailureType, TFailureShape, readonly TState[]>,
+] {
+  type TSuccessEvent = EventFromShape<TSuccessType, TSuccessShape>;
+  type TFailureEvent = EventFromShape<TFailureType, TFailureShape>;
+
+  return [
+    api.enter(async (enterApi) => {
+      try {
+        const successPayload = await config.run(enterApi);
+        await enterApi.dispatch({
+          type: config.success.type,
+          ...successPayload,
+        } as TSuccessEvent);
+      } catch (error) {
+        const failurePayload = await config.failure.mapError(error, enterApi);
+        await enterApi.dispatch({
+          type: config.failure.type,
+          ...failurePayload,
+        } as TFailureEvent);
+      }
+    }),
+    createRequestStepEventRegistration(api.on, config.success),
+    createRequestStepEventRegistration(api.on, config.failure),
+  ] as const;
 }
 
 export function createFlow<

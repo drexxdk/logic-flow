@@ -19,6 +19,7 @@ The first version currently includes:
 
 - a small runtime for creating flows from typed context schemas and step-local events
 - named steps with typed event handlers
+- a `requestStep(...)` helper for async request states that emit typed success and failure events
 - context updates through explicit `update(...)`
 - state transitions through explicit `goto(...)` with typed `states.*` refs
 - async effects with pending-effect tracking
@@ -114,6 +115,42 @@ const instance = flow.createInstance({ autoStart: true });
 This is a convenience for the common `createInstance()` + `start()` pattern in UI integrations.
 
 For external callers, `instance.send(event)` is also available as a small alias for `instance.dispatch(event)`.
+
+For the common "enter a loading state, run async work, then dispatch typed success or failure events" pattern, `requestStep(...)` can hide the dispatch boilerplate while still returning normal registrations from the step:
+
+```ts
+import { createFlow, requestStep } from 'logic-flow';
+
+.step('publishing', (api) =>
+  requestStep(api, {
+    run: async ({ effect }) => {
+      await effect('publishRequest', doPublish);
+      return {};
+    },
+    success: {
+      type: 'PUBLISHED',
+      shape: {},
+      target: api.states.published,
+      handle: ({ goto, update }) => {
+        update({ published: true, error: undefined });
+        goto(api.states.published);
+      },
+    },
+    failure: {
+      type: 'FAILED',
+      shape: { message: z.string() },
+      target: api.states.draft,
+      mapError: () => ({ message: 'Publish request failed.' }),
+      handle: ({ event, goto, update }) => {
+        update({ error: event.message });
+        goto(api.states.draft);
+      },
+    },
+  }),
+)
+```
+
+This is the first higher-level helper layered on top of `createFlow(...)`, not a replacement for the core builder.
 
 ## Runtime Semantics
 

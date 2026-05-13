@@ -1,4 +1,4 @@
-import { createFlow } from 'logic-flow';
+import { createFlow, requestStep } from 'logic-flow';
 import { z } from 'zod';
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -47,27 +47,35 @@ export const publishingFlow = createFlow({
       goto(states.publishing);
     }),
   )
-  .step('publishing', ({ enter, on, states }) => [
-    enter(async ({ dispatch, effect }) => {
-      try {
+  .step('publishing', (api) =>
+    requestStep(api, {
+      run: async ({ effect }) => {
         await effect('publishRequest', async () => {
           await wait(1000);
         });
-        await dispatch({ type: 'PUBLISHED' });
-      } catch {
-        await dispatch({ type: 'FAILED', message: 'Publish request failed.' });
-      }
+        return {};
+      },
+      success: {
+        type: 'PUBLISHED',
+        shape: {},
+        target: api.states.published,
+        handle: ({ goto, update }) => {
+          update({ published: true, error: undefined });
+          goto(api.states.published);
+        },
+      },
+      failure: {
+        type: 'FAILED',
+        shape: { message: z.string() },
+        target: api.states.draft,
+        mapError: () => ({ message: 'Publish request failed.' }),
+        handle: ({ event, goto, update }) => {
+          update({ error: event.message });
+          goto(api.states.draft);
+        },
+      },
     }),
-    on('FAILED', { message: z.string() }, states.draft, ({ event, goto, update }) => {
-      update({ error: event.message });
-      goto(states.draft);
-    }),
-
-    on('PUBLISHED', {}, states.published, ({ goto, update }) => {
-      update({ published: true, error: undefined });
-      goto(states.published);
-    }),
-  ])
+  )
   .step('published', ({ enter, states }) =>
     enter(states.draft, ({ schedule }) => {
       schedule(1500, ({ goto, update }) => {
