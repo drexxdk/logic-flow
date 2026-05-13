@@ -170,6 +170,14 @@ const synced = defineEvent('SYNCED', { itemCount: z.number().int().nonnegative()
 
 Inline `on('TYPE', shape, ...)` is still the default when an event is local to one step. `defineEvent(...)` is there for the cases where the same payload contract should be shared.
 
+The same reusable definition can also be sent from outside the flow without an extra `.create(...)` step:
+
+```ts
+const failed = defineEvent('FAILED', { message: z.string() });
+
+await instance.send(failed, { message: 'Network down' });
+```
+
 For the common "enter a loading state, run async work, then dispatch typed success or failure events" pattern, `requestStep(...)` can hide the dispatch boilerplate while still returning normal registrations from the step:
 
 ```ts

@@ -117,6 +117,13 @@ This terminal rule applies to `dispatch(...)` called from the flow API inside ha
 
 It does **not** mean that calling `instance.dispatch(...)` from application code is terminal for your app code. External dispatch is just the public way to send an event into the flow.
 
+External callers can send either a plain event object or a reusable event definition with payload:
+
+```ts
+await instance.send({ type: 'FAILED', message: 'Network down' });
+await instance.send(failed, { message: 'Network down' });
+```
+
 ## Instance Lifecycle
 
 `FlowInstance` has two important lifecycle boundaries:

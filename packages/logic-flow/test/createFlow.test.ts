@@ -185,14 +185,15 @@ describe('createFlow', () => {
       .build();
 
     const instance = flow.createInstance();
-    const externalSuccessEvent: Parameters<typeof instance.send>[0] = { type: 'SAVED' };
-    const externalFailureEvent: Parameters<typeof instance.send>[0] = {
-      type: 'FAILED',
-      message: 'typed failure',
+    const assertExternalSendTypes = () => {
+      void instance.send({ type: 'SAVED' });
+      void instance.send({ type: 'FAILED', message: 'typed failure' });
+
+      // @ts-expect-error FAILED requires its message payload.
+      void instance.send({ type: 'FAILED' });
     };
 
-    expect(externalSuccessEvent).toEqual({ type: 'SAVED' });
-    expect(externalFailureEvent).toEqual({ type: 'FAILED', message: 'typed failure' });
+    void assertExternalSendTypes;
 
     const dispatchPromise = instance.dispatch({ type: 'SAVE' });
 
@@ -265,6 +266,13 @@ describe('createFlow', () => {
     const failed = defineEvent('FAILED', { message: z.string() });
     const synced = defineEvent('SYNCED', { itemCount: z.number().int().nonnegative() });
 
+    const assertReusableDefinitionSurface = () => {
+      // @ts-expect-error create is intentionally not part of the public event definition API.
+      void synced.create({ itemCount: 4 });
+    };
+
+    void assertReusableDefinitionSurface;
+
     const flow = createFlow({
       name: 'reusable-events',
       context: z.object({ itemCount: z.number(), error: z.string().optional() }),
@@ -293,11 +301,16 @@ describe('createFlow', () => {
       .build();
 
     const instance = flow.createInstance();
-    const externalSyncedEvent: Parameters<typeof instance.send>[0] = synced.create({
-      itemCount: 4,
-    });
+    const assertExternalReusableSendTypes = () => {
+      void instance.send(synced, { itemCount: 4 });
 
-    expect(externalSyncedEvent).toEqual({ type: 'SYNCED', itemCount: 4 });
+      // @ts-expect-error SYNCED requires its itemCount payload.
+      void instance.send(synced);
+    };
+
+    void assertExternalReusableSendTypes;
+
+    await instance.send(synced, { itemCount: 4 });
 
     await instance.dispatch({ type: 'START' });
 

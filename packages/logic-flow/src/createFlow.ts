@@ -107,11 +107,15 @@ interface EventFactory<TType extends string, TShape extends EventShape> {
   create(payload?: EventPayload<TShape>): EventFromShape<TType, TShape>;
 }
 
-export interface FlowEventDefinition<
-  TType extends string,
-  TShape extends EventShape,
-> extends EventFactory<TType, TShape> {
+declare const flowEventShapeBrand: unique symbol;
+
+export interface FlowEventDefinition<TType extends string, TShape extends EventShape> {
   readonly type: TType;
+  readonly [flowEventShapeBrand]?: TShape;
+}
+
+interface InternalFlowEventDefinition<TType extends string, TShape extends EventShape>
+  extends FlowEventDefinition<TType, TShape>, EventFactory<TType, TShape> {
   readonly schema: z.ZodObject<{ type: z.ZodLiteral<TType> } & TShape>;
 }
 
@@ -120,7 +124,7 @@ interface EventRegistration<
   TType extends string,
   TShape extends EventShape,
   TTargets extends FlowTransitionTargets<TState>,
-> extends FlowEventDefinition<TType, TShape> {
+> extends InternalFlowEventDefinition<TType, TShape> {
   kind: 'event';
   targets: TTargets;
   handler: unknown;
@@ -430,8 +434,20 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   private startPromise: Promise<FlowSnapshot<TContext, TState, TEvent>> | undefined;
   private snapshot: FlowSnapshot<TContext, TState, TEvent>;
 
-  public readonly send = <TDispatchedEvent extends TEvent>(event: TDispatchedEvent) =>
-    this.dispatch(event);
+  public readonly send: {
+    <TDispatchedEvent extends TEvent>(event: TDispatchedEvent): Promise<void>;
+    <TType extends string, TShape extends EventShape>(
+      eventDefinition: FlowEventDefinition<TType, TShape>,
+      ...args: EventPayloadArgs<TShape>
+    ): Promise<void>;
+  } = ((eventOrDefinition: TEvent | FlowEventDefinition<string, EventShape>, payload?: unknown) =>
+    this.dispatch(eventOrDefinition as never, payload as never)) as {
+    <TDispatchedEvent extends TEvent>(event: TDispatchedEvent): Promise<void>;
+    <TType extends string, TShape extends EventShape>(
+      eventDefinition: FlowEventDefinition<TType, TShape>,
+      ...args: EventPayloadArgs<TShape>
+    ): Promise<void>;
+  };
 
   public constructor(
     private readonly definition: IFlowDefinitionRuntime<TContext, TEvent, TState>,
@@ -490,10 +506,22 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     }
   }
 
-  public async dispatch<TDispatchedEvent extends TEvent>(event: TDispatchedEvent): Promise<void> {
+  public async dispatch<TDispatchedEvent extends TEvent>(event: TDispatchedEvent): Promise<void>;
+  public async dispatch<TType extends string, TShape extends EventShape>(
+    eventDefinition: FlowEventDefinition<TType, TShape>,
+    ...args: EventPayloadArgs<TShape>
+  ): Promise<void>;
+  public async dispatch(
+    eventOrDefinition: TEvent | FlowEventDefinition<string, EventShape>,
+    payload?: unknown,
+  ): Promise<void> {
     if (this.isDestroyed) {
       return;
     }
+
+    const event = isFlowEventDefinition(eventOrDefinition)
+      ? eventOrDefinition.create(payload as never)
+      : eventOrDefinition;
 
     this.queue.push(this.definition.validateEvent(event));
 
@@ -663,7 +691,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
         return this.dispatch(nextEventOrRegistration.create(payload as never) as TEvent);
       }
 
-      return this.dispatch(nextEventOrRegistration);
+      return this.dispatch(nextEventOrRegistration as TEvent);
     }) as FlowApi<TContext, TEvent, TState>['dispatch'];
 
     return {
@@ -860,10 +888,10 @@ function createEventSchema<const TType extends string, TShape extends EventShape
   } as { type: z.ZodLiteral<TType> } & TShape);
 }
 
-export function defineEvent<const TType extends string, TShape extends EventShape>(
+function createInternalEventDefinition<const TType extends string, TShape extends EventShape>(
   type: TType,
   shape: TShape,
-): FlowEventDefinition<TType, TShape> {
+): InternalFlowEventDefinition<TType, TShape> {
   return {
     type,
     schema: createEventSchema(type, shape),
@@ -873,6 +901,13 @@ export function defineEvent<const TType extends string, TShape extends EventShap
         ...(payload ?? {}),
       }) as EventFromShape<TType, TShape>,
   };
+}
+
+export function defineEvent<const TType extends string, TShape extends EventShape>(
+  type: TType,
+  shape: TShape,
+): FlowEventDefinition<TType, TShape> {
+  return createInternalEventDefinition(type, shape);
 }
 
 function isTransitionOptions<TState extends string>(
@@ -905,7 +940,9 @@ function normalizeStepRegistrations<TState extends string>(
   return Array.isArray(registrations) ? registrations : [registrations as StepRegistration<TState>];
 }
 
-function isFlowEventDefinition(value: unknown): value is FlowEventDefinition<string, EventShape> {
+function isFlowEventDefinition(
+  value: unknown,
+): value is InternalFlowEventDefinition<string, EventShape> {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -933,12 +970,10 @@ function createRequestStepEventRegistration<
   >;
 
   if (!config.target) {
-    return on(defineEvent(config.type, config.shape), handler) as EventRegistration<
-      TState,
-      TType,
-      TShape,
-      readonly TState[]
-    >;
+    return on(
+      createInternalEventDefinition(config.type, config.shape),
+      handler,
+    ) as EventRegistration<TState, TType, TShape, readonly TState[]>;
   }
 
   return (
@@ -952,7 +987,7 @@ function createRequestStepEventRegistration<
         EventFromShape<TType, TShape>
       >,
     ) => EventRegistration<TState, TType, TShape, readonly TState[]>
-  )(defineEvent(config.type, config.shape), config.target, handler);
+  )(createInternalEventDefinition(config.type, config.shape), config.target, handler);
 }
 
 export function requestStep<
@@ -1042,8 +1077,8 @@ export function createFlow<
         ) => {
           const eventDefinition =
             typeof eventOrType === 'string'
-              ? defineEvent(eventOrType, shapeOrOptionsOrHandler as EventShape)
-              : eventOrType;
+              ? createInternalEventDefinition(eventOrType, shapeOrOptionsOrHandler as EventShape)
+              : (eventOrType as InternalFlowEventDefinition<string, EventShape>);
           const hasOptions =
             typeof eventOrType === 'string'
               ? typeof maybeHandler === 'function'
