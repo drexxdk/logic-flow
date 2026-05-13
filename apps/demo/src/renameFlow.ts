@@ -23,12 +23,12 @@ export const renameFlow = createFlow({
     versions: ['Original course', 'Teacher notes', 'Rename me'],
   },
 })
-  .step('closed', ({ on, states }) => [
+  .step('closed', ({ on, states }) =>
     on('OPEN', {}, states.editing, ({ ctx, goto, update }) => {
       update({ modalOpen: true, heading: ctx.savedHeading, error: undefined });
       goto(states.editing);
     }),
-  ])
+  )
   .step('editing', ({ on, states }) => [
     on('CHANGE', { value: z.string() }, ({ ctx, event, update }) => {
       const normalizedValue = event.value.trim().toLowerCase();
@@ -84,11 +84,11 @@ export const renameFlow = createFlow({
       goto(states.success);
     }),
   ])
-  .step('success', ({ enter, states }) => [
+  .step('success', ({ enter, states }) =>
     enter(states.closed, ({ schedule }) => {
       schedule(1200, ({ goto: delayedGoto }) => {
         delayedGoto(states.closed);
       });
     }),
-  ])
+  )
   .build();

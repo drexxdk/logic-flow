@@ -17,6 +17,7 @@ Completed so far:
 - made `start()` idempotent per instance
 - validated timer cleanup, queued external dispatch ordering, and error propagation semantics with focused tests
 - added `createInstance({ autoStart: true })` and `instance.send(...)` as small consumer-facing ergonomics
+- added `.step('done')` support for empty states without weakening event inference
 - narrowed the top-level public export surface to consumer-facing types and values only
 - added snapshot subscription support for UI integration
 - added focused tests for validation, branching, async effects, and delayed transitions
@@ -38,6 +39,8 @@ Completed so far:
 - instance lifecycle control with `start()`, `destroy()`, and `subscribe(...)`
 - `autoStart` instance creation and `send(...)` alias for external callers
 - explicit array-returning step registration contract to preserve TypeScript event inference
+- optional empty-state declaration with `.step('done')`
+- optional single-registration step returns for one-handler states
 
 ### Demo
 
@@ -62,6 +65,7 @@ Not implemented yet:
 Current design constraints:
 
 - the supported step authoring contract is the array-returning form, for example `.step('idle', ({ on }) => [on(...)])`
+- steps can also return a single registration directly for one-handler states, for example `.step('review', ({ on }) => on(...))`
 - a more imperative `step(..., () => { on(...); })` style was prototyped but is not supported because it weakens TypeScript inference for external `dispatch(...)` and `send(...)`
 - authoring ergonomics should only be changed when they preserve or improve the current type guarantees
 

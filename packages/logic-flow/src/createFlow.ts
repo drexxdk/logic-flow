@@ -123,8 +123,12 @@ type StepEvent<TRegistration> =
     ? EventFromShape<TType, TShape>
     : never;
 
-type StepEvents<TRegistrations extends readonly unknown[]> = StepEvent<TRegistrations[number]>;
-type StepRegistrationList<TState extends string> = readonly StepRegistration<TState>[];
+type StepEvents<TRegistrations> = TRegistrations extends readonly unknown[]
+  ? StepEvent<TRegistrations[number]>
+  : StepEvent<TRegistrations>;
+type StepRegistrationResult<TState extends string> =
+  | StepRegistration<TState>
+  | readonly StepRegistration<TState>[];
 
 interface IStepDefinition<TContext, TAllEvents extends FlowEvent, TState extends string> {
   handlers: Partial<Record<string, FlowHandler<TContext, TAllEvents, TState, FlowEvent>>>;
@@ -706,7 +710,8 @@ interface FlowBuilder<
   TStates extends readonly [string, ...string[]],
   TAllEvents extends FlowEvent,
 > {
-  step<TRegistrations extends StepRegistrationList<FlowStateNames<TStates>>>(
+  step(name: FlowStateNames<TStates>): FlowBuilder<TContextSchema, TStates, TAllEvents>;
+  step<TRegistrations extends StepRegistrationResult<FlowStateNames<TStates>>>(
     name: FlowStateNames<TStates>,
     register: (
       api: IStepRegistrar<z.infer<TContextSchema>, TAllEvents, FlowStateNames<TStates>>,
@@ -755,6 +760,12 @@ function normalizeTargets<TState extends string>(
   return isTransitionOptions(targetOrTargets) ? targetOrTargets.targets : [];
 }
 
+function normalizeStepRegistrations<TState extends string>(
+  registrations: StepRegistrationResult<TState>,
+): readonly StepRegistration<TState>[] {
+  return Array.isArray(registrations) ? registrations : [registrations as StepRegistration<TState>];
+}
+
 export function createFlow<
   TContextSchema extends z.ZodTypeAny,
   const TStates extends readonly [string, ...string[]],
@@ -771,10 +782,10 @@ export function createFlow<
     TStates,
     TAllEvents
   > => ({
-    step<TRegistrations extends StepRegistrationList<TState>>(
+    step: (<TRegistrations extends StepRegistrationResult<TState>>(
       name: TState,
-      register: (api: IStepRegistrar<TContext, TAllEvents, TState>) => TRegistrations,
-    ) {
+      register?: (api: IStepRegistrar<TContext, TAllEvents, TState>) => TRegistrations,
+    ) => {
       if (steps.has(name)) {
         throw new Error(`State "${name}" is already defined in flow "${config.name}".`);
       }
@@ -825,7 +836,7 @@ export function createFlow<
         }) as IStepRegistrar<TContext, TAllEvents, TState>['enter'],
       };
 
-      const registrations = register(registrar);
+      const registrations = register ? normalizeStepRegistrations(register(registrar)) : [];
 
       for (const registration of registrations) {
         if (registration.kind === 'enter') {
@@ -874,8 +885,10 @@ export function createFlow<
       }
 
       steps.set(name, definition);
-      return createBuilder<TAllEvents | StepEvents<TRegistrations>>();
-    },
+      return register
+        ? createBuilder<TAllEvents | StepEvents<TRegistrations>>()
+        : createBuilder<TAllEvents>();
+    }) as FlowBuilder<TContextSchema, TStates, TAllEvents>['step'],
     build() {
       if (!steps.has(config.initial)) {
         throw new Error(`Initial state "${config.initial}" must be defined before build().`);

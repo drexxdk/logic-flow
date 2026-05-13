@@ -42,11 +42,11 @@ export const publishingFlow = createFlow({
       goto(states.publishing);
     }),
   ])
-  .step('review', ({ on, states }) => [
+  .step('review', ({ on, states }) =>
     on('APPROVE', {}, states.publishing, ({ goto }) => {
       goto(states.publishing);
     }),
-  ])
+  )
   .step('publishing', ({ enter, on, states }) => [
     enter(async ({ dispatch, effect }) => {
       try {
@@ -68,12 +68,12 @@ export const publishingFlow = createFlow({
       goto(states.published);
     }),
   ])
-  .step('published', ({ enter, states }) => [
+  .step('published', ({ enter, states }) =>
     enter(states.draft, ({ schedule }) => {
       schedule(1500, ({ goto, update }) => {
         update({ published: false });
         goto(states.draft);
       });
     }),
-  ])
+  )
   .build();

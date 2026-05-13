@@ -45,7 +45,11 @@ The supported step authoring form is the array-returning registration style:
 ])
 ```
 
-This is deliberate. A more imperative `step(..., () => { on(...); })` form was prototyped, but it weakens TypeScript inference for external `dispatch(...)` and `send(...)` in the current design. `logic-flow` currently prefers the more explicit authoring contract over a shorter syntax that loses type information.
+If a state has no handlers or `enter(...)` hooks yet, you can declare it as `.step('done')` instead of `.step('done', () => [])`.
+
+Steps still infer from their return value, so a step can return either a single registration or an array of registrations. Use the direct form for one handler or one `enter(...)` hook, and the array form when a state needs multiple registrations.
+
+This is deliberate. A more imperative `step(..., () => { on(...); })` form was prototyped, but it weakens TypeScript inference for external `dispatch(...)` and `send(...)` in the current design. `logic-flow` currently prefers the explicit return-value contract over a shorter syntax that loses type information.
 
 For the runtime rules around `goto(...)`, `dispatch(...)`, terminal execution, and `try/catch`, see [docs/execution-semantics.md](docs/execution-semantics.md).
 
@@ -82,11 +86,11 @@ const publishingFlow = createFlow({
       goto(ctx.requiresLegalReview ? states.review : states.publishing);
     }),
   ])
-  .step('review', ({ on, states }) => [
+  .step('review', ({ on, states }) =>
     on('APPROVE', {}, ({ goto }) => {
       goto(states.publishing);
     }),
-  ])
+  )
   .build();
 ```
 
@@ -99,7 +103,7 @@ What this buys you:
 - optional `targets` metadata narrows `goto(...)` to the declared destinations and is exposed on `flow.transitions`
 - the built flow exposes the full inferred event union to `dispatch(...)`
 
-The array-returning step shape is part of that inference story today.
+The return-value-based step shape is part of that inference story today.
 
 When you want to immediately run the initial enter lifecycle, you can create an instance with:
 

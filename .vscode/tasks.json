@@ -767,6 +767,86 @@
 			],
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "logic-flow tests empty step overload",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"test",
+				"--",
+				"test/createFlow.test.ts"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "logic-flow build empty step docs",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow test single registration",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"--filter",
+				"logic-flow",
+				"test",
+				"--",
+				"test/createFlow.test.ts"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "logic-flow workspace build single registration",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow workspace build single registration retry",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow workspace build single registration final",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "logic-flow workspace build single registration success",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
 		}
 	]
 }

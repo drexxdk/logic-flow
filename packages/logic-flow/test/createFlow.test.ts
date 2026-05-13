@@ -262,6 +262,66 @@ describe('createFlow', () => {
     });
   });
 
+  it('allows defining an empty step without a registration callback', async () => {
+    const flow = createFlow({
+      name: 'empty-step',
+      context: z.object({ complete: z.boolean() }),
+      states: ['idle', 'done'] as const,
+      initial: 'idle',
+      initialContext: { complete: false },
+    })
+      .step('idle', ({ on, states }) => [
+        on('FINISH', {}, states.done, ({ goto, update }) => {
+          update({ complete: true });
+          goto(states.done);
+        }),
+      ])
+      .step('done')
+      .build();
+
+    const instance = flow.createInstance();
+
+    await instance.dispatch({ type: 'FINISH' });
+
+    expect(instance.getSnapshot()).toMatchObject({
+      state: 'done',
+      context: { complete: true },
+    });
+    expect(flow.transitions).toEqual({
+      idle: [{ kind: 'event', event: 'FINISH', targets: ['done'] }],
+      done: [],
+    });
+  });
+
+  it('allows returning a single registration without wrapping it in an array', async () => {
+    const flow = createFlow({
+      name: 'single-registration',
+      context: z.object({ approved: z.boolean() }),
+      states: ['review', 'published'] as const,
+      initial: 'review',
+      initialContext: { approved: false },
+    })
+      .step('review', ({ on, states }) =>
+        on('APPROVE', {}, states.published, ({ goto, update }) => {
+          update({ approved: true });
+          goto(states.published);
+        }),
+      )
+      .step('published')
+      .build();
+
+    const instance = flow.createInstance();
+
+    await instance.dispatch({ type: 'APPROVE' });
+
+    expect(instance.getSnapshot().state).toBe('published');
+    expect(instance.getSnapshot().context.approved).toBe(true);
+    expect(flow.transitions).toEqual({
+      review: [{ kind: 'event', event: 'APPROVE', targets: ['published'] }],
+      published: [],
+    });
+  });
+
   it('fails build when a declared state has no step definition', () => {
     expect(() =>
       createFlow({
