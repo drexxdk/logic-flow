@@ -7,45 +7,20 @@ export const renameComparison: CodeExample = {
 const MAX_HEADING_LENGTH = 24;
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-interface RenameContext {
-  modalOpen: boolean;
-  heading: string;
-  savedHeading: string;
-  versions: string[];
-  error?: string;
-}
-
-type RenameEvent =
-  | { type: 'OPEN' }
-  | { type: 'CHANGE'; value: string }
-  | { type: 'CLOSE' }
-  | { type: 'SAVE' };
-
-function validateHeading(context: RenameContext, value: string) {
-  const normalizedValue = value.trim().toLowerCase();
-
-  if (value.trim().length === 0) {
-    return 'Heading is required.';
-  }
-
-  if (value.length > MAX_HEADING_LENGTH) {
-    return 'Heading must be ' + MAX_HEADING_LENGTH + ' characters or fewer.';
-  }
-
-  if (
-    context.versions.some((version) => version.toLowerCase() === normalizedValue) &&
-    normalizedValue !== context.savedHeading.toLowerCase()
-  ) {
-    return 'Heading must be unique.';
-  }
-
-  return undefined;
-}
-
 const renameMachine = setup({
   types: {
-    context: {} as RenameContext,
-    events: {} as RenameEvent,
+    context: {} as {
+      modalOpen: boolean;
+      heading: string;
+      savedHeading: string;
+      versions: string[];
+      error?: string;
+    },
+    events: {} as
+      | { type: 'OPEN' }
+      | { type: 'CHANGE'; value: string }
+      | { type: 'CLOSE' }
+      | { type: 'SAVE' },
   },
   actors: {
     renameHeading: fromPromise(async ({ input }: { input: { heading: string } }) => {
@@ -77,10 +52,26 @@ const renameMachine = setup({
     editing: {
       on: {
         CHANGE: {
-          actions: assign(({ context, event }) => ({
-            heading: event.value,
-            error: validateHeading(context, event.value),
-          })),
+          actions: assign(({ context, event }) => {
+            const normalizedValue = event.value.trim().toLowerCase();
+            let error: string | undefined;
+
+            if (event.value.trim().length === 0) {
+              error = 'Heading is required.';
+            } else if (event.value.length > MAX_HEADING_LENGTH) {
+              error = 'Heading must be ' + MAX_HEADING_LENGTH + ' characters or fewer.';
+            } else if (
+              context.versions.some((version) => version.toLowerCase() === normalizedValue) &&
+              normalizedValue !== context.savedHeading.toLowerCase()
+            ) {
+              error = 'Heading must be unique.';
+            }
+
+            return {
+              heading: event.value,
+              error,
+            };
+          }),
         },
         CLOSE: {
           target: 'closed',
@@ -124,38 +115,15 @@ import { z } from 'zod';
 const MAX_HEADING_LENGTH = 24;
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-const renameContextSchema = z.object({
-  modalOpen: z.boolean(),
-  heading: z.string(),
-  savedHeading: z.string(),
-  versions: z.array(z.string()),
-  error: z.string().optional(),
-});
-
-function validateHeading(ctx: z.infer<typeof renameContextSchema>, value: string) {
-  const normalizedValue = value.trim().toLowerCase();
-
-  if (value.trim().length === 0) {
-    return 'Heading is required.';
-  }
-
-  if (value.length > MAX_HEADING_LENGTH) {
-    return 'Heading must be ' + MAX_HEADING_LENGTH + ' characters or fewer.';
-  }
-
-  if (
-    ctx.versions.some((version) => version.toLowerCase() === normalizedValue) &&
-    normalizedValue !== ctx.savedHeading.toLowerCase()
-  ) {
-    return 'Heading must be unique.';
-  }
-
-  return undefined;
-}
-
 export const renameFlow = createFlow({
   name: 'rename-demo',
-  context: renameContextSchema,
+  context: z.object({
+    modalOpen: z.boolean(),
+    heading: z.string(),
+    savedHeading: z.string(),
+    versions: z.array(z.string()),
+    error: z.string().optional(),
+  }),
   states: ['closed', 'editing', 'saving', 'success'] as const,
   initial: 'closed',
   initialContext: {
@@ -173,7 +141,20 @@ export const renameFlow = createFlow({
   )
   .step('editing', ({ on, states }) => [
     on('CHANGE', { value: z.string() }, ({ ctx, event, update }) => {
-      const error = validateHeading(ctx, event.value);
+      const normalizedValue = event.value.trim().toLowerCase();
+      let error: string | undefined;
+
+      if (event.value.trim().length === 0) {
+        error = 'Heading is required.';
+      } else if (event.value.length > MAX_HEADING_LENGTH) {
+        error = 'Heading must be ' + MAX_HEADING_LENGTH + ' characters or fewer.';
+      } else if (
+        ctx.versions.some((version) => version.toLowerCase() === normalizedValue) &&
+        normalizedValue !== ctx.savedHeading.toLowerCase()
+      ) {
+        error = 'Heading must be unique.';
+      }
+
       update({ heading: event.value, error });
     }),
     on('CLOSE', {}, states.closed, ({ goto, update }) => {
@@ -223,9 +204,9 @@ export const renameFlow = createFlow({
       });
     }),
   );`,
-  typedLineNumbers: [6, 13, 44, 50, 60, 67, 81, 96],
+  typedLineNumbers: [7, 23, 45, 51, 66, 72, 86, 101],
   typedReasons: [
-    'The context schema is the runtime validator and the source of inferred handler context types, so there is no separate interface plus schema to keep aligned.',
+    'The flow keeps the runtime schema and the inferred context type in the same declaration, instead of maintaining a separate type-only context shape.',
     'Event payloads are declared next to each handler instead of being predeclared in a global event union before the machine definition.',
     'Dispatching through the local `saved` and `failed` registrations keeps the async success and failure payloads aligned with the handler contracts.',
   ],

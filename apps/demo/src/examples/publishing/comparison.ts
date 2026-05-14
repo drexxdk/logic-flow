@@ -6,23 +6,19 @@ export const publishingComparison: CodeExample = {
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-interface PublishingContext {
-  title: string;
-  requiresLegalReview: boolean;
-  error?: string;
-  published: boolean;
-}
-
-type PublishingEvent =
-  | { type: 'CHANGE_TITLE'; value: string }
-  | { type: 'TOGGLE_LEGAL_REVIEW' }
-  | { type: 'SUBMIT' }
-  | { type: 'APPROVE' };
-
 const publishMachine = setup({
   types: {
-    context: {} as PublishingContext,
-    events: {} as PublishingEvent,
+    context: {} as {
+      title: string;
+      requiresLegalReview: boolean;
+      error?: string;
+      published: boolean;
+    },
+    events: {} as
+      | { type: 'CHANGE_TITLE'; value: string }
+      | { type: 'TOGGLE_LEGAL_REVIEW' }
+      | { type: 'SUBMIT' }
+      | { type: 'APPROVE' },
   },
   actors: {
     publishRequest: fromPromise(async () => {
@@ -169,7 +165,7 @@ export const publishingFlow = createFlow({
   );`,
   typedLineNumbers: [7, 20, 26, 34, 40, 48, 55, 66],
   typedReasons: [
-    'The context schema, event payload shapes, and runtime validation stay in one place instead of splitting across interfaces, setup types, and machine config.',
+    'The logic-flow version still keeps the runtime schema and inferred context type in one place, even after inlining the one-off XState types for fairness.',
     'Normal `if` and `else` branching replaces the guard-array encoding while still narrowing `goto(...)` to the declared submit targets.',
     '`requestStep(...)` keeps the async success and failure contracts local to the request state instead of scattering them between actor setup and invoke callbacks.',
   ],

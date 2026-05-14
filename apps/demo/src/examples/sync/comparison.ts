@@ -6,21 +6,6 @@ export const syncComparison: CodeExample = {
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-interface SyncContext {
-  syncedItems: number;
-  shouldFail: boolean;
-  lastAttempt?: 'syncing' | 'retrying';
-  error?: string;
-}
-
-type SyncEvent =
-  | { type: 'START' }
-  | { type: 'RETRY' }
-  | { type: 'RESET' }
-  | { type: 'TOGGLE_FAILURE' }
-  | { type: 'FAILED'; message: string }
-  | { type: 'SYNCED'; itemCount: number };
-
 async function runSyncRequest(shouldFail: boolean) {
   await wait(900);
 
@@ -31,20 +16,21 @@ async function runSyncRequest(shouldFail: boolean) {
   return 3;
 }
 
-const toFailed = (message: string): Extract<SyncEvent, { type: 'FAILED' }> => ({
-  type: 'FAILED',
-  message,
-});
-
-const toSynced = (itemCount: number): Extract<SyncEvent, { type: 'SYNCED' }> => ({
-  type: 'SYNCED',
-  itemCount,
-});
-
 const syncMachine = setup({
   types: {
-    context: {} as SyncContext,
-    events: {} as SyncEvent,
+    context: {} as {
+      syncedItems: number;
+      shouldFail: boolean;
+      lastAttempt?: 'syncing' | 'retrying';
+      error?: string;
+    },
+    events: {} as
+      | { type: 'START' }
+      | { type: 'RETRY' }
+      | { type: 'RESET' }
+      | { type: 'TOGGLE_FAILURE' }
+      | { type: 'FAILED'; message: string }
+      | { type: 'SYNCED'; itemCount: number },
   },
   actors: {
     syncCatalog: fromPromise(async ({ input }: { input: { shouldFail: boolean } }) =>
@@ -74,10 +60,10 @@ const syncMachine = setup({
         src: 'syncCatalog',
         input: ({ context }) => ({ shouldFail: context.shouldFail }),
         onDone: {
-          actions: raise(({ event }) => toSynced(event.output)),
+          actions: raise(({ event }) => ({ type: 'SYNCED', itemCount: event.output })),
         },
         onError: {
-          actions: raise(() => toFailed('Initial sync failed. Toggle failure and retry.')),
+          actions: raise({ type: 'FAILED', message: 'Initial sync failed. Toggle failure and retry.' }),
         },
       },
       on: {
@@ -111,10 +97,10 @@ const syncMachine = setup({
         src: 'syncCatalog',
         input: ({ context }) => ({ shouldFail: context.shouldFail }),
         onDone: {
-          actions: raise(({ event }) => toSynced(event.output)),
+          actions: raise(({ event }) => ({ type: 'SYNCED', itemCount: event.output })),
         },
         onError: {
-          actions: raise(() => toFailed('Retry failed. The same FAILED contract still applies.')),
+          actions: raise({ type: 'FAILED', message: 'Retry failed. The same FAILED contract still applies.' }),
         },
       },
       on: {
@@ -252,9 +238,9 @@ export const syncFlow = createFlow({
       update({ shouldFail: !ctx.shouldFail });
     }),
   ]);`,
-  typedLineNumbers: [4, 5, 29, 38, 42, 48, 76, 86],
+  typedLineNumbers: [4, 5, 30, 39, 43, 49, 77, 87],
   typedReasons: [
-    '`defineEvent(...)` gives the shared FAILED and SYNCED contracts one reusable source of truth instead of rebuilding helper creators plus event unions around them.',
+    '`defineEvent(...)` gives the shared FAILED and SYNCED contracts one reusable source of truth instead of rebuilding inline event objects in each invoke branch.',
     'The same event definitions are reused directly in both request states, so local handlers and internal dispatches stay aligned without extra glue code.',
     'The flow code keeps the retry state logic as normal functions while still preserving typed context, events, and transition targets throughout the chain.',
   ],
