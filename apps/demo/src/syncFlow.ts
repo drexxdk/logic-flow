@@ -108,5 +108,4 @@ export const syncFlow = createFlow({
     on('TOGGLE_FAILURE', {}, ({ ctx, update }) => {
       update({ shouldFail: !ctx.shouldFail });
     }),
-  ])
-  .build();
+  ]);

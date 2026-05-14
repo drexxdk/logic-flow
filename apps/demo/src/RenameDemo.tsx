@@ -2,7 +2,7 @@ import { CodeComparison } from './CodeComparison';
 import { renameComparison } from './comparisonExamples';
 import { renameFlow } from './renameFlow';
 import { SnapshotBlock } from './SnapshotBlock';
-import { useFlow } from './useFlow';
+import { useFlow } from 'logic-flow/react';
 
 export function RenameDemo() {
   const { snapshot, send } = useFlow(renameFlow);

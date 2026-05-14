@@ -4,7 +4,8 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "logic-flow": ["../../packages/logic-flow/src/index.ts"]
+      "logic-flow": ["../../packages/logic-flow/src/index.ts"],
+      "logic-flow/react": ["../../packages/logic-flow/src/react.ts"]
     },
     "types": ["vite/client"]
   },

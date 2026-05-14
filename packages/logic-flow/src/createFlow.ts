@@ -98,6 +98,9 @@ type EventPayload<TShape extends EventShape> = z.infer<z.ZodObject<TShape>>;
 type EventPayloadArgs<TShape extends EventShape> = keyof TShape extends never
   ? [] | [payload: EventPayload<TShape>]
   : [payload: EventPayload<TShape>];
+type RequestStepRunResult<TShape extends EventShape> = keyof TShape extends never
+  ? void | EventPayload<TShape>
+  : EventPayload<TShape>;
 
 type EventFromShape<TType extends string, TShape extends EventShape> = {
   type: TType;
@@ -288,12 +291,12 @@ interface RequestStepTransitionConfig<
   TAllEvents extends FlowEvent,
   TState extends string,
   TType extends string,
-  TShape extends EventShape,
+  TShape extends EventShape = {},
 > {
   type: TType;
-  shape: TShape;
+  shape?: TShape;
   target?: FlowTransitionInput<TState, readonly TState[]>;
-  handle: FlowHandler<
+  handle?: FlowHandler<
     TContext,
     TAllEvents | EventFromShape<TType, TShape>,
     TState,
@@ -325,7 +328,7 @@ interface RequestStepConfig<
 > {
   run: (
     api: FlowEnterApi<TContext, TAllEvents, TState>,
-  ) => Awaitable<z.infer<z.ZodObject<TSuccessShape>>>;
+  ) => Awaitable<RequestStepRunResult<TSuccessShape>>;
   success: RequestStepTransitionConfig<
     TContext,
     | TAllEvents
@@ -957,11 +960,11 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   }
 }
 
-interface FlowBuilder<
+export interface FlowBuilder<
   TContextSchema extends z.ZodTypeAny,
   TStates extends readonly [string, ...string[]],
   TAllEvents extends FlowEvent,
-> {
+> extends FlowDefinition<z.infer<TContextSchema>, TAllEvents, FlowStateNames<TStates>> {
   step(name: FlowStateNames<TStates>): FlowBuilder<TContextSchema, TStates, TAllEvents>;
   step<TRegistrations extends StepRegistrationResult<FlowStateNames<TStates>>>(
     name: FlowStateNames<TStates>,
@@ -969,7 +972,6 @@ interface FlowBuilder<
       api: IStepRegistrar<z.infer<TContextSchema>, TAllEvents, FlowStateNames<TStates>>,
     ) => TRegistrations,
   ): FlowBuilder<TContextSchema, TStates, TAllEvents | StepEvents<TRegistrations>>;
-  build(): FlowDefinition<z.infer<TContextSchema>, TAllEvents, FlowStateNames<TStates>>;
 }
 
 function createStateRefs<TState extends string>(states: readonly TState[]): FlowStateRefs<TState> {
@@ -1052,6 +1054,12 @@ function isFlowEventDefinition(
   );
 }
 
+const EMPTY_EVENT_SHAPE = {} as EventShape;
+
+function hasShapeFields<TShape extends EventShape>(shape: TShape): boolean {
+  return Object.keys(shape).length > 0;
+}
+
 function createRequestStepEventRegistration<
   TContext,
   TAllEvents extends FlowEvent,
@@ -1062,7 +1070,13 @@ function createRequestStepEventRegistration<
   on: IStepRegistrar<TContext, TAllEvents, TState>['on'],
   config: RequestStepTransitionConfig<TContext, TAllEvents, TState, TType, TShape>,
 ): EventRegistration<TState, TType, TShape, readonly TState[]> {
-  const handler = config.handle as FlowHandler<
+  const shape = (config.shape ?? EMPTY_EVENT_SHAPE) as TShape;
+  const handler = (config.handle ??
+    (({ goto }) => {
+      if (config.target) {
+        goto(normalizeTargets(config.target)[0] as TState);
+      }
+    })) as FlowHandler<
     TContext,
     TAllEvents | EventFromShape<TType, TShape>,
     TState,
@@ -1070,10 +1084,12 @@ function createRequestStepEventRegistration<
   >;
 
   if (!config.target) {
-    return on(
-      createInternalEventDefinition(config.type, config.shape),
-      handler,
-    ) as EventRegistration<TState, TType, TShape, readonly TState[]>;
+    return on(createInternalEventDefinition(config.type, shape), handler) as EventRegistration<
+      TState,
+      TType,
+      TShape,
+      readonly TState[]
+    >;
   }
 
   return (
@@ -1087,7 +1103,7 @@ function createRequestStepEventRegistration<
         EventFromShape<TType, TShape>
       >,
     ) => EventRegistration<TState, TType, TShape, readonly TState[]>
-  )(createInternalEventDefinition(config.type, config.shape), config.target, handler);
+  )(createInternalEventDefinition(config.type, shape), config.target, handler);
 }
 
 export function requestStep<
@@ -1116,12 +1132,18 @@ export function requestStep<
 ] {
   const success = createRequestStepEventRegistration(api.on, config.success);
   const failure = createRequestStepEventRegistration(api.on, config.failure);
+  const successShape = (config.success.shape ?? EMPTY_EVENT_SHAPE) as TSuccessShape;
 
   return [
     api.enter(async (enterApi) => {
       try {
         const successPayload = await config.run(enterApi);
-        await enterApi.dispatch(success, successPayload);
+
+        if (hasShapeFields(successShape) || typeof successPayload !== 'undefined') {
+          await enterApi.dispatch(success, successPayload as EventPayload<TSuccessShape>);
+        } else {
+          await enterApi.dispatch(success, {} as EventPayload<TSuccessShape>);
+        }
       } catch (error) {
         const failurePayload = await config.failure.mapError(error, enterApi);
         await enterApi.dispatch(failure, failurePayload);
@@ -1143,11 +1165,53 @@ export function createFlow<
   const eventSchemas = new Map<string, z.ZodType<FlowEvent>>();
   const stateRefs = createStateRefs(config.states as readonly TState[]);
 
+  const buildDefinition = <TAllEvents extends FlowEvent>(): FlowDefinition<
+    TContext,
+    TAllEvents,
+    TState
+  > => {
+    if (!steps.has(config.initial)) {
+      throw new Error(`Initial state "${config.initial}" must be defined before using the flow.`);
+    }
+
+    for (const state of config.states) {
+      if (!steps.has(state)) {
+        throw new Error(`State "${state}" must be defined before using the flow.`);
+      }
+    }
+
+    const transitions = Object.freeze(
+      Object.fromEntries(
+        config.states.map((state) => [state, Object.freeze(steps.get(state)?.transitions ?? [])]),
+      ) as Record<TState, readonly FlowTransitionDescriptor<TState>[]>,
+    );
+
+    return new InternalFlowDefinition<TContext, TAllEvents, TState, TContextSchema>(
+      config.name,
+      config.initial,
+      config.context,
+      eventSchemas,
+      stateRefs,
+      steps as Map<TState, IStepDefinition<TContext, TAllEvents, TState>>,
+      transitions,
+      config.initialContext,
+    );
+  };
+
   const createBuilder = <TAllEvents extends FlowEvent>(): FlowBuilder<
     TContextSchema,
     TStates,
     TAllEvents
   > => ({
+    name: config.name,
+    initial: config.initial,
+    initialContext: config.initialContext,
+    get transitions() {
+      return buildDefinition<TAllEvents>().transitions;
+    },
+    createInstance(options?: FlowInstanceOptions) {
+      return buildDefinition<TAllEvents>().createInstance(options);
+    },
     step: (<TRegistrations extends StepRegistrationResult<TState>>(
       name: TState,
       register?: (api: IStepRegistrar<TContext, TAllEvents, TState>) => TRegistrations,
@@ -1279,34 +1343,6 @@ export function createFlow<
         ? createBuilder<TAllEvents | StepEvents<TRegistrations>>()
         : createBuilder<TAllEvents>();
     }) as FlowBuilder<TContextSchema, TStates, TAllEvents>['step'],
-    build() {
-      if (!steps.has(config.initial)) {
-        throw new Error(`Initial state "${config.initial}" must be defined before build().`);
-      }
-
-      for (const state of config.states) {
-        if (!steps.has(state)) {
-          throw new Error(`State "${state}" must be defined before build().`);
-        }
-      }
-
-      const transitions = Object.freeze(
-        Object.fromEntries(
-          config.states.map((state) => [state, Object.freeze(steps.get(state)?.transitions ?? [])]),
-        ) as Record<TState, readonly FlowTransitionDescriptor<TState>[]>,
-      );
-
-      return new InternalFlowDefinition<TContext, TAllEvents, TState, TContextSchema>(
-        config.name,
-        config.initial,
-        config.context,
-        eventSchemas,
-        stateRefs,
-        steps as Map<TState, IStepDefinition<TContext, TAllEvents, TState>>,
-        transitions,
-        config.initialContext,
-      );
-    },
   });
 
   return createBuilder<never>();

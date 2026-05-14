@@ -30,13 +30,11 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { count: 0 },
-    })
-      .step('idle', ({ on }) => [
-        on('ADD', { amount: z.number().int().positive() }, ({ ctx, event, update }) => {
-          update({ count: ctx.count + event.amount });
-        }),
-      ])
-      .build();
+    }).step('idle', ({ on }) => [
+      on('ADD', { amount: z.number().int().positive() }, ({ ctx, event, update }) => {
+        update({ count: ctx.count + event.amount });
+      }),
+    ]);
 
     const instance = flow.createInstance();
 
@@ -53,18 +51,16 @@ describe('createFlow', () => {
       states: ['editing'] as const,
       initial: 'editing',
       initialContext: { status: 'idle' },
-    })
-      .step('editing', ({ on }) => [
-        on('SUBMIT', { title: z.string() }, ({ event, update }) => {
-          if (event.title.trim().length < 5) {
-            update({ status: 'error', note: 'too-short' });
-            return;
-          }
+    }).step('editing', ({ on }) => [
+      on('SUBMIT', { title: z.string() }, ({ event, update }) => {
+        if (event.title.trim().length < 5) {
+          update({ status: 'error', note: 'too-short' });
+          return;
+        }
 
-          update({ status: 'ready', note: undefined });
-        }),
-      ])
-      .build();
+        update({ status: 'ready', note: undefined });
+      }),
+    ]);
 
     const instance = flow.createInstance();
 
@@ -92,8 +88,7 @@ describe('createFlow', () => {
           goto(states.done);
         }),
       ])
-      .step('done', () => [])
-      .build();
+      .step('done', () => []);
 
     const instance = flow.createInstance();
     const dispatchPromise = instance.dispatch({ type: 'SAVE' });
@@ -131,8 +126,7 @@ describe('createFlow', () => {
           });
         }),
       ])
-      .step('closed', () => [])
-      .build();
+      .step('closed', () => []);
 
     const instance = flow.createInstance();
 
@@ -188,8 +182,7 @@ describe('createFlow', () => {
           },
         }),
       )
-      .step('done')
-      .build();
+      .step('done');
 
     const instance = flow.createInstance();
     const assertExternalSendTypes = () => {
@@ -304,8 +297,7 @@ describe('createFlow', () => {
         }),
       ])
       .step('failed', () => [])
-      .step('done', () => [])
-      .build();
+      .step('done', () => []);
 
     const instance = flow.createInstance();
     const assertExternalReusableSendTypes = () => {
@@ -347,8 +339,7 @@ describe('createFlow', () => {
         enter(() => {
           order.push('enter-success');
         }),
-      ])
-      .build();
+      ]);
 
     const instance = flow.createInstance();
 
@@ -373,8 +364,7 @@ describe('createFlow', () => {
 
         return [enter(({ dispatch }) => dispatch(finish).then(() => dispatch(finish))), finish];
       })
-      .step('done', () => [])
-      .build();
+      .step('done', () => []);
 
     const instance = flow.createInstance();
 
@@ -401,8 +391,7 @@ describe('createFlow', () => {
           goto(states.published);
         }),
       ])
-      .step('published', () => [])
-      .build();
+      .step('published', () => []);
 
     expect(flow.transitions).toEqual({
       draft: [{ kind: 'event', event: 'SUBMIT', targets: ['review', 'published'] }],
@@ -432,8 +421,7 @@ describe('createFlow', () => {
           goto(states.idle);
         }),
       ])
-      .step('done', () => [])
-      .build();
+      .step('done', () => []);
 
     const instance = flow.createInstance();
 
@@ -464,8 +452,7 @@ describe('createFlow', () => {
           goto(states.done);
         }),
       ])
-      .step('done')
-      .build();
+      .step('done');
 
     const instance = flow.createInstance();
 
@@ -495,8 +482,7 @@ describe('createFlow', () => {
           goto(states.published);
         }),
       )
-      .step('published')
-      .build();
+      .step('published');
 
     const instance = flow.createInstance();
 
@@ -510,7 +496,7 @@ describe('createFlow', () => {
     });
   });
 
-  it('fails build when a declared state has no step definition', () => {
+  it('fails when a declared state has no step definition before use', () => {
     expect(() =>
       createFlow({
         name: 'missing-step',
@@ -520,8 +506,8 @@ describe('createFlow', () => {
         initialContext: { ready: false },
       })
         .step('idle', () => [])
-        .build(),
-    ).toThrow('State "done" must be defined before build().');
+        .createInstance(),
+    ).toThrow('State "done" must be defined before using the flow.');
   });
 
   it('fails when the same state is defined more than once', () => {
@@ -534,8 +520,7 @@ describe('createFlow', () => {
         initialContext: { ready: false },
       })
         .step('idle', () => [])
-        .step('idle', () => [])
-        .build(),
+        .step('idle', () => []),
     ).toThrow('State "idle" is already defined in flow "duplicate-step".');
   });
 
@@ -547,16 +532,14 @@ describe('createFlow', () => {
         states: ['idle'] as const,
         initial: 'idle',
         initialContext: { count: 0 },
-      })
-        .step('idle', ({ on }) => [
-          on('INC', {}, ({ ctx, update }) => {
-            update({ count: ctx.count + 1 });
-          }),
-          on('INC', {}, ({ ctx, update }) => {
-            update({ count: ctx.count + 2 });
-          }),
-        ])
-        .build(),
+      }).step('idle', ({ on }) => [
+        on('INC', {}, ({ ctx, update }) => {
+          update({ count: ctx.count + 1 });
+        }),
+        on('INC', {}, ({ ctx, update }) => {
+          update({ count: ctx.count + 2 });
+        }),
+      ]),
     ).toThrow('Event "INC" is already defined for state "idle" in flow "duplicate-event".');
   });
 
@@ -589,8 +572,7 @@ describe('createFlow', () => {
           saved,
         ];
       })
-      .step('done', () => [])
-      .build();
+      .step('done', () => []);
 
     const instance = flow.createInstance();
     const dispatchPromise = instance.dispatch({ type: 'SAVE' });
@@ -620,13 +602,11 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { count: 0 },
-    })
-      .step('idle', ({ on }) => [
-        on('INC', {}, ({ ctx, update }) => {
-          update({ count: ctx.count + 1 });
-        }),
-      ])
-      .build();
+    }).step('idle', ({ on }) => [
+      on('INC', {}, ({ ctx, update }) => {
+        update({ count: ctx.count + 1 });
+      }),
+    ]);
 
     const instance = flow.createInstance();
 
@@ -645,24 +625,22 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { count: 0, order: [] },
-    })
-      .step('idle', ({ on }) => [
-        on('FIRST', {}, async ({ ctx, effect, update }) => {
-          update({ order: [...ctx.order, 'first:start'] });
-          await effect('first', () => firstEventDeferred.promise);
-          update((currentContext) => ({
-            count: currentContext.count + 1,
-            order: [...currentContext.order, 'first:end'],
-          }));
-        }),
-        on('SECOND', {}, ({ ctx, update }) => {
-          update({
-            count: ctx.count + 1,
-            order: [...ctx.order, 'second'],
-          });
-        }),
-      ])
-      .build();
+    }).step('idle', ({ on }) => [
+      on('FIRST', {}, async ({ ctx, effect, update }) => {
+        update({ order: [...ctx.order, 'first:start'] });
+        await effect('first', () => firstEventDeferred.promise);
+        update((currentContext) => ({
+          count: currentContext.count + 1,
+          order: [...currentContext.order, 'first:end'],
+        }));
+      }),
+      on('SECOND', {}, ({ ctx, update }) => {
+        update({
+          count: ctx.count + 1,
+          order: [...ctx.order, 'second'],
+        });
+      }),
+    ]);
 
     const instance = flow.createInstance();
     const firstDispatchPromise = instance.dispatch({ type: 'FIRST' });
@@ -694,24 +672,22 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { count: 0, order: [] },
-    })
-      .step('idle', ({ on }) => [
-        on('FIRST', {}, async ({ ctx, effect, update }) => {
-          update({ order: [...ctx.order, 'first:start'] });
-          await effect('first', () => firstEventDeferred.promise);
-          update((currentContext) => ({
-            count: currentContext.count + 1,
-            order: [...currentContext.order, 'first:end'],
-          }));
-        }),
-        on('SECOND', {}, ({ ctx, update }) => {
-          update({
-            count: ctx.count + 1,
-            order: [...ctx.order, 'second'],
-          });
-        }),
-      ])
-      .build();
+    }).step('idle', ({ on }) => [
+      on('FIRST', {}, async ({ ctx, effect, update }) => {
+        update({ order: [...ctx.order, 'first:start'] });
+        await effect('first', () => firstEventDeferred.promise);
+        update((currentContext) => ({
+          count: currentContext.count + 1,
+          order: [...currentContext.order, 'first:end'],
+        }));
+      }),
+      on('SECOND', {}, ({ ctx, update }) => {
+        update({
+          count: ctx.count + 1,
+          order: [...ctx.order, 'second'],
+        });
+      }),
+    ]);
 
     const instance = flow.createInstance();
     let hasQueuedSecond = false;
@@ -750,14 +726,12 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { entered: 0 },
-    })
-      .step('idle', ({ enter }) => [
-        enter(({ ctx, update }) => {
-          order.push('enter');
-          update({ entered: ctx.entered + 1 });
-        }),
-      ])
-      .build();
+    }).step('idle', ({ enter }) => [
+      enter(({ ctx, update }) => {
+        order.push('enter');
+        update({ entered: ctx.entered + 1 });
+      }),
+    ]);
 
     const instance = flow.createInstance();
 
@@ -777,18 +751,16 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { fired: false },
-    })
-      .step('idle', ({ enter }) => [
-        enter(({ schedule, update }) => {
-          const cancel = schedule(100, ({ update: delayedUpdate }) => {
-            delayedUpdate({ fired: true });
-          });
+    }).step('idle', ({ enter }) => [
+      enter(({ schedule, update }) => {
+        const cancel = schedule(100, ({ update: delayedUpdate }) => {
+          delayedUpdate({ fired: true });
+        });
 
-          update({ fired: false });
-          cancel();
-        }),
-      ])
-      .build();
+        update({ fired: false });
+        cancel();
+      }),
+    ]);
 
     const instance = flow.createInstance();
 
@@ -798,6 +770,75 @@ describe('createFlow', () => {
     expect(instance.getSnapshot().context.fired).toBe(false);
 
     vi.useRealTimers();
+  });
+
+  it('does not require a final build call', async () => {
+    const flow = createFlow({
+      name: 'no-build',
+      context: z.object({ count: z.number() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { count: 0 },
+    }).step('idle', ({ on }) =>
+      on('INC', {}, ({ ctx, update }) => {
+        update({ count: ctx.count + 1 });
+      }),
+    );
+
+    const instance = flow.createInstance();
+
+    await instance.dispatch({ type: 'INC' });
+
+    expect(instance.getSnapshot().context.count).toBe(1);
+  });
+
+  it('allows requestStep success events without an empty shape or payload object', async () => {
+    const deferred = createDeferred<void>();
+
+    const flow = createFlow({
+      name: 'request-step-no-payload',
+      context: z.object({ saved: z.boolean() }),
+      states: ['idle', 'saving', 'done'] as const,
+      initial: 'idle',
+      initialContext: { saved: false },
+    })
+      .step('idle', ({ on, states }) =>
+        on('SAVE', {}, states.saving, ({ goto }) => {
+          goto(states.saving);
+        }),
+      )
+      .step('saving', (api) =>
+        requestStep(api, {
+          run: ({ effect }) => effect('persist', () => deferred.promise),
+          success: {
+            type: 'SAVED',
+            target: api.states.done,
+            handle: ({ goto, update }) => {
+              update({ saved: true });
+              goto(api.states.done);
+            },
+          },
+          failure: {
+            type: 'FAILED',
+            shape: { message: z.string() },
+            target: api.states.idle,
+            mapError: () => ({ message: 'Save failed.' }),
+          },
+        }),
+      )
+      .step('done');
+
+    const instance = flow.createInstance();
+    const dispatchPromise = instance.dispatch({ type: 'SAVE' });
+
+    deferred.resolve();
+    await dispatchPromise;
+
+    expect(instance.getSnapshot()).toMatchObject({
+      state: 'done',
+      context: { saved: true },
+      pendingEffects: [],
+    });
   });
 
   it('clears scheduled tasks when transitioning out of the owning state', async () => {
@@ -826,8 +867,7 @@ describe('createFlow', () => {
           goto(states.done);
         }),
       ])
-      .step('done', () => [])
-      .build();
+      .step('done', () => []);
 
     const instance = flow.createInstance();
 
@@ -854,19 +894,17 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { firedCount: 0 },
-    })
-      .step('idle', ({ enter, on, states }) => [
-        enter(({ schedule, update }) => {
-          schedule(100, ({ getSnapshot: readSnapshot, update: delayedUpdate }) => {
-            delayedUpdate({ firedCount: readSnapshot().context.firedCount + 1 });
-          });
-          update({ firedCount: 0 });
-        }),
-        on('REARM', {}, states.idle, ({ goto }) => {
-          goto(states.idle);
-        }),
-      ])
-      .build();
+    }).step('idle', ({ enter, on, states }) => [
+      enter(({ schedule, update }) => {
+        schedule(100, ({ getSnapshot: readSnapshot, update: delayedUpdate }) => {
+          delayedUpdate({ firedCount: readSnapshot().context.firedCount + 1 });
+        });
+        update({ firedCount: 0 });
+      }),
+      on('REARM', {}, states.idle, ({ goto }) => {
+        goto(states.idle);
+      }),
+    ]);
 
     const instance = flow.createInstance();
 
@@ -892,13 +930,11 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { count: 0 },
-    })
-      .step('idle', ({ on }) => [
-        on('FAIL', {}, () => {
-          throw new Error('handler failed');
-        }),
-      ])
-      .build();
+    }).step('idle', ({ on }) => [
+      on('FAIL', {}, () => {
+        throw new Error('handler failed');
+      }),
+    ]);
 
     const instance = flow.createInstance();
 
@@ -917,14 +953,12 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { attempted: false },
-    })
-      .step('idle', ({ on }) => [
-        on('RUN', {}, async ({ effect, update }) => {
-          update({ attempted: true });
-          await effect('persist', () => deferred.promise);
-        }),
-      ])
-      .build();
+    }).step('idle', ({ on }) => [
+      on('RUN', {}, async ({ effect, update }) => {
+        update({ attempted: true });
+        await effect('persist', () => deferred.promise);
+      }),
+    ]);
 
     const instance = flow.createInstance();
     const dispatchPromise = instance.dispatch({ type: 'RUN' });
@@ -949,20 +983,18 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { count: 0, order: [] },
-    })
-      .step('idle', ({ on }) => [
-        on('FIRST', {}, async ({ ctx, effect, update }) => {
-          update({ order: [...ctx.order, 'first:start'] });
-          await effect('first', () => deferred.promise);
-        }),
-        on('SECOND', {}, ({ ctx, update }) => {
-          update({
-            count: ctx.count + 1,
-            order: [...ctx.order, 'second'],
-          });
-        }),
-      ])
-      .build();
+    }).step('idle', ({ on }) => [
+      on('FIRST', {}, async ({ ctx, effect, update }) => {
+        update({ order: [...ctx.order, 'first:start'] });
+        await effect('first', () => deferred.promise);
+      }),
+      on('SECOND', {}, ({ ctx, update }) => {
+        update({
+          count: ctx.count + 1,
+          order: [...ctx.order, 'second'],
+        });
+      }),
+    ]);
 
     const instance = flow.createInstance();
     const firstDispatchPromise = instance.dispatch({ type: 'FIRST' });
@@ -993,24 +1025,22 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { count: 0, order: [] },
-    })
-      .step('idle', ({ on }) => [
-        on('FIRST', {}, async ({ ctx, effect, update }) => {
-          update({ order: [...ctx.order, 'first:start'] });
-          await effect('first', () => deferred.promise);
-          update((currentContext) => ({
-            count: currentContext.count + 1,
-            order: [...currentContext.order, 'first:end'],
-          }));
-        }),
-        on('SECOND', {}, ({ ctx, update }) => {
-          update({
-            count: ctx.count + 1,
-            order: [...ctx.order, 'second'],
-          });
-        }),
-      ])
-      .build();
+    }).step('idle', ({ on }) => [
+      on('FIRST', {}, async ({ ctx, effect, update }) => {
+        update({ order: [...ctx.order, 'first:start'] });
+        await effect('first', () => deferred.promise);
+        update((currentContext) => ({
+          count: currentContext.count + 1,
+          order: [...currentContext.order, 'first:end'],
+        }));
+      }),
+      on('SECOND', {}, ({ ctx, update }) => {
+        update({
+          count: ctx.count + 1,
+          order: [...ctx.order, 'second'],
+        });
+      }),
+    ]);
 
     const instance = flow.createInstance();
     const firstDispatchPromise = instance.dispatch({ type: 'FIRST' });
@@ -1039,13 +1069,11 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { ready: false },
-    })
-      .step('idle', ({ enter }) => [
-        enter(() => {
-          throw new Error('enter failed');
-        }),
-      ])
-      .build();
+    }).step('idle', ({ enter }) => [
+      enter(() => {
+        throw new Error('enter failed');
+      }),
+    ]);
 
     const instance = flow.createInstance();
 
@@ -1061,13 +1089,11 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { entered: 0 },
-    })
-      .step('idle', ({ enter }) => [
-        enter(({ ctx, update }) => {
-          update({ entered: ctx.entered + 1 });
-        }),
-      ])
-      .build();
+    }).step('idle', ({ enter }) => [
+      enter(({ ctx, update }) => {
+        update({ entered: ctx.entered + 1 });
+      }),
+    ]);
 
     const instance = flow.createInstance({ autoStart: true });
 
@@ -1085,14 +1111,12 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { entered: 0 },
-    })
-      .step('idle', ({ enter }) => [
-        enter(({ ctx, update }) => {
-          order.push('enter');
-          update({ entered: ctx.entered + 1 });
-        }),
-      ])
-      .build();
+    }).step('idle', ({ enter }) => [
+      enter(({ ctx, update }) => {
+        order.push('enter');
+        update({ entered: ctx.entered + 1 });
+      }),
+    ]);
 
     const instance = flow.createInstance({ autoStart: true });
 
@@ -1110,13 +1134,11 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { count: 0 },
-    })
-      .step('idle', ({ on }) => [
-        on('INC', {}, ({ ctx, update }) => {
-          update({ count: ctx.count + 1 });
-        }),
-      ])
-      .build();
+    }).step('idle', ({ on }) => [
+      on('INC', {}, ({ ctx, update }) => {
+        update({ count: ctx.count + 1 });
+      }),
+    ]);
 
     const instance = flow.createInstance();
 
@@ -1132,13 +1154,11 @@ describe('createFlow', () => {
       states: ['idle'] as const,
       initial: 'idle',
       initialContext: { count: 0 },
-    })
-      .step('idle', ({ on }) => [
-        on('INC', {}, ({ ctx, update }) => {
-          update({ count: ctx.count + 1 });
-        }),
-      ])
-      .build();
+    }).step('idle', ({ on }) => [
+      on('INC', {}, ({ ctx, update }) => {
+        update({ count: ctx.count + 1 });
+      }),
+    ]);
 
     const instance = flow.createInstance();
     const send = instance.send;

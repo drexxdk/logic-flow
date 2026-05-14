@@ -34,7 +34,7 @@ This is intentionally narrow. It is a proof of concept for the authoring model, 
 The current package entrypoint is intentionally small. Treat this as the supported `0.1.x` contract:
 
 - runtime values: `createFlow`, `defineEvent`, `requestStep`, and `FlowInstance`
-- public types: `FlowDefinition`, `FlowEvent`, `FlowEventDefinition`, `FlowInstanceOptions`, and `FlowSnapshot`
+- public types: `FlowBuilder`, `FlowDefinition`, `FlowEvent`, `FlowEventDefinition`, `FlowInstanceOptions`, and `FlowSnapshot`
 
 Everything else in the runtime implementation should be considered internal, even if it appears in source-level examples or can be inferred from the code. Higher-level helpers should keep building on top of this surface instead of reaching into builder internals.
 
@@ -100,8 +100,7 @@ const publishingFlow = createFlow({
     on('APPROVE', {}, ({ goto }) => {
       goto(states.publishing);
     }),
-  )
-  .build();
+  );
 ```
 
 What this buys you:
@@ -111,7 +110,7 @@ What this buys you:
 - handler `event` payloads are inferred from the local shape passed to `on(...)`
 - transitions can target `states.review` or `states.publishing` instead of repeating raw strings
 - optional `targets` metadata narrows `goto(...)` to the declared destinations and is exposed on `flow.transitions`
-- the built flow exposes the full inferred event union to `dispatch(...)`
+- the flow exposes the full inferred event union to `dispatch(...)`
 
 The return-value-based step shape is part of that inference story today.
 
@@ -194,13 +193,9 @@ import { createFlow, requestStep } from 'logic-flow';
 
 .step('publishing', (api) =>
   requestStep(api, {
-    run: async ({ effect }) => {
-      await effect('publishRequest', doPublish);
-      return {};
-    },
+    run: ({ effect }) => effect('publishRequest', doPublish),
     success: {
       type: 'PUBLISHED',
-      shape: {},
       target: api.states.published,
       handle: ({ goto, update }) => {
         update({ published: true, error: undefined });

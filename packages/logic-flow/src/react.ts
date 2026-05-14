@@ -1,4 +1,4 @@
-import type { FlowDefinition, FlowEvent, FlowInstance, FlowSnapshot } from 'logic-flow';
+import type { FlowDefinition, FlowEvent, FlowInstance, FlowSnapshot } from './createFlow';
 import { useEffect, useRef, useState } from 'react';
 
 export function useFlow<TContext, TEvent extends FlowEvent, TState extends string>(

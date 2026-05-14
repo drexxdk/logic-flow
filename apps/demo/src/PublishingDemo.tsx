@@ -2,7 +2,7 @@ import { CodeComparison } from './CodeComparison';
 import { publishingComparison } from './comparisonExamples';
 import { publishingFlow } from './publishingFlow';
 import { SnapshotBlock } from './SnapshotBlock';
-import { useFlow } from './useFlow';
+import { useFlow } from 'logic-flow/react';
 
 export function PublishingDemo() {
   const { snapshot, send } = useFlow(publishingFlow);

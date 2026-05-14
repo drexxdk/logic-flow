@@ -52,11 +52,9 @@ export const renameFlow = createFlow({
       goto(states.closed);
     }),
     on('SAVE', {}, states.saving, ({ ctx, goto }) => {
-      if (ctx.error || ctx.heading.trim().length === 0) {
-        return;
+      if (!ctx.error && ctx.heading.trim().length > 0) {
+        goto(states.saving);
       }
-
-      goto(states.saving);
     }),
   ])
   .step('saving', ({ enter, on, states }) => {
@@ -101,9 +99,8 @@ export const renameFlow = createFlow({
   })
   .step('success', ({ enter, states }) =>
     enter(states.closed, ({ schedule }) => {
-      schedule(1200, ({ goto: delayedGoto }) => {
-        delayedGoto(states.closed);
+      schedule(1200, ({ goto }) => {
+        goto(states.closed);
       });
     }),
-  )
-  .build();
+  );

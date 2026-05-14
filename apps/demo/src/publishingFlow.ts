@@ -31,15 +31,9 @@ export const publishingFlow = createFlow({
     on('SUBMIT', {}, [states.review, states.publishing], ({ ctx, goto, update }) => {
       if (ctx.title.trim().length < 6) {
         update({ error: 'Title must be at least 6 characters.' });
-        return;
+      } else {
+        goto(ctx.requiresLegalReview ? states.review : states.publishing);
       }
-
-      if (ctx.requiresLegalReview) {
-        goto(states.review);
-        return;
-      }
-
-      goto(states.publishing);
     }),
   ])
   .step('review', ({ on, states }) =>
@@ -49,15 +43,12 @@ export const publishingFlow = createFlow({
   )
   .step('publishing', (api) =>
     requestStep(api, {
-      run: async ({ effect }) => {
-        await effect('publishRequest', async () => {
+      run: ({ effect }) =>
+        effect('publishRequest', async () => {
           await wait(1000);
-        });
-        return {};
-      },
+        }),
       success: {
         type: 'PUBLISHED',
-        shape: {},
         target: api.states.published,
         handle: ({ goto, update }) => {
           update({ published: true, error: undefined });
@@ -83,5 +74,4 @@ export const publishingFlow = createFlow({
         goto(states.draft);
       });
     }),
-  )
-  .build();
+  );

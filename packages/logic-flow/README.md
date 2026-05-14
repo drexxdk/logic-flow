@@ -18,6 +18,7 @@ Runtime exports:
 Type exports:
 
 - `FlowDefinition`
+- `FlowBuilder`
 - `FlowEvent`
 - `FlowEventDefinition`
 - `FlowInstanceOptions`
@@ -92,8 +93,7 @@ const flow = createFlow({
       goto(states.done);
     }),
   ])
-  .step('done')
-  .build();
+  .step('done');
 ```
 
 The supported step authoring contract is return-value-based:
@@ -101,6 +101,8 @@ The supported step authoring contract is return-value-based:
 - return an array when a step has multiple registrations
 - return a single registration directly for one-handler steps
 - use `.step('done')` for empty states
+
+There is no separate final `.build()` call. A flow is ready once every declared state has been defined.
 
 This is deliberate. The package currently favors that explicit return-value shape because it preserves stronger event inference for external `dispatch(...)` and `send(...)`.
 
@@ -113,6 +115,8 @@ This is deliberate. The package currently favors that explicit return-value shap
 - running work in `enter(...)`
 - dispatching typed success or failure events
 - keeping the resulting registrations part of the normal step contract
+
+When a success event has no payload, omit `shape` and let `run(...)` return `void`.
 
 ## Runtime Semantics
 

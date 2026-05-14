@@ -82,7 +82,7 @@ export const renameComparison: CodeExample = {
       saved,
     ];
   })
-  .build();`,
+  );`,
   typedLineNumbers: [2, 7, 10, 16, 21, 28],
   typedReasons: [
     'Local Zod payloads make CHANGE and SAVED payloads infer directly from the handler site.',
@@ -148,21 +148,16 @@ export const publishingComparison: CodeExample = {
     on('SUBMIT', {}, [states.review, states.publishing], ({ ctx, goto, update }) => {
       if (ctx.title.trim().length < 6) {
         update({ error: 'Title must be at least 6 characters.' });
-        return;
+      } else {
+        goto(ctx.requiresLegalReview ? states.review : states.publishing);
       }
-
-      goto(ctx.requiresLegalReview ? states.review : states.publishing);
     }),
   ])
   .step('publishing', (api) =>
     requestStep(api, {
-      run: async ({ effect }) => {
-        await effect('publishRequest', publishPost);
-        return {};
-      },
+      run: ({ effect }) => effect('publishRequest', publishPost),
       success: {
         type: 'PUBLISHED',
-        shape: {},
         target: api.states.published,
       },
       failure: {
@@ -171,8 +166,7 @@ export const publishingComparison: CodeExample = {
         target: api.states.draft,
       },
     }),
-  )
-  .build();`,
+  );`,
   typedLineNumbers: [2, 7, 10, 13, 21, 27, 32],
   typedReasons: [
     'The local CHANGE_TITLE payload is inferred from the Zod shape instead of being predeclared in a global event union.',
@@ -249,8 +243,7 @@ const syncFlow = createFlow({
       failed,
       synced,
     ];
-  })
-  .build();`,
+  });`,
   typedLineNumbers: [1, 2, 10, 13, 17, 24],
   typedReasons: [
     '`defineEvent(...)` creates one reusable contract that stays typed everywhere it is registered or dispatched.',

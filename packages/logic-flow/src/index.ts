@@ -4,6 +4,7 @@ export {
   FlowInstance,
   requestStep,
   type FlowDefinition,
+  type FlowBuilder,
   type FlowEvent,
   type FlowEventDefinition,
   type FlowInstanceOptions,
