@@ -1,7 +1,8 @@
-import { CodeComparison } from './CodeComparison';
 import { useFlow } from 'logic-flow/react';
-import { syncComparison } from './comparisonExamples';
-import { SnapshotBlock } from './SnapshotBlock';
+
+import { CodeComparison } from '../../components/CodeComparison';
+import { SnapshotBlock } from '../../components/SnapshotBlock';
+import { syncComparison } from './comparison';
 import { syncFlow } from './syncFlow';
 
 export function SyncDemo() {

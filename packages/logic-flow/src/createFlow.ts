@@ -94,6 +94,7 @@ type FlowEnterHandler<
 > = (api: FlowEnterApi<TContext, TEvent, TState, TGotoState>) => Awaitable<void>;
 
 type EventShape = z.ZodRawShape;
+type EmptyEventShape = Record<never, z.ZodTypeAny>;
 type EventPayload<TShape extends EventShape> = z.infer<z.ZodObject<TShape>>;
 type EventPayloadArgs<TShape extends EventShape> = keyof TShape extends never
   ? [] | [payload: EventPayload<TShape>]
@@ -291,7 +292,7 @@ interface RequestStepTransitionConfig<
   TAllEvents extends FlowEvent,
   TState extends string,
   TType extends string,
-  TShape extends EventShape = {},
+  TShape extends EventShape = EmptyEventShape,
 > {
   type: TType;
   shape?: TShape;

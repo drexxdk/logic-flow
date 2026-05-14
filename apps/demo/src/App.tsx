@@ -1,6 +1,4 @@
-import { PublishingDemo } from './PublishingDemo';
-import { RenameDemo } from './RenameDemo';
-import { SyncDemo } from './SyncDemo';
+import { PublishingDemo, RenameDemo, SyncDemo } from './examples';
 
 export default function App() {
   return (

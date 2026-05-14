@@ -1,8 +1,9 @@
-import { CodeComparison } from './CodeComparison';
-import { renameComparison } from './comparisonExamples';
-import { renameFlow } from './renameFlow';
-import { SnapshotBlock } from './SnapshotBlock';
 import { useFlow } from 'logic-flow/react';
+
+import { CodeComparison } from '../../components/CodeComparison';
+import { SnapshotBlock } from '../../components/SnapshotBlock';
+import { renameComparison } from './comparison';
+import { renameFlow } from './renameFlow';
 
 export function RenameDemo() {
   const { snapshot, send } = useFlow(renameFlow);

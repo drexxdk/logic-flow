@@ -1,8 +1,9 @@
-import { CodeComparison } from './CodeComparison';
-import { publishingComparison } from './comparisonExamples';
-import { publishingFlow } from './publishingFlow';
-import { SnapshotBlock } from './SnapshotBlock';
 import { useFlow } from 'logic-flow/react';
+
+import { CodeComparison } from '../../components/CodeComparison';
+import { SnapshotBlock } from '../../components/SnapshotBlock';
+import { publishingComparison } from './comparison';
+import { publishingFlow } from './publishingFlow';
 
 export function PublishingDemo() {
   const { snapshot, send } = useFlow(publishingFlow);
