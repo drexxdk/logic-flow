@@ -163,6 +163,20 @@ After `destroy()`:
 
 This prevents stale work from updating state after the owning UI or runtime has already disposed the flow instance.
 
+## Effect Ownership
+
+`effect(...)` work belongs to the currently active state execution.
+
+That means when the flow leaves a state:
+
+- that state's pending effect names are removed from the snapshot immediately
+- the old async task may still settle later, but resumed flow logic from that old execution becomes inert
+- stale `update(...)`, `goto(...)`, `dispatch(...)`, `schedule(...)`, and nested `effect(...)` calls from the old execution no longer affect the live state
+
+This same invalidation happens on self-transitions and `destroy()`.
+
+The current runtime does not yet provide abort signals to the underlying async task itself. State ownership prevents stale writes and stale control flow after a transition, but the task function still runs until its own promise settles.
+
 ## Scheduled Work Ownership
 
 Scheduled work created by `schedule(...)` belongs to the currently active state execution.

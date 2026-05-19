@@ -35,12 +35,13 @@ Anything else in the source should be treated as internal implementation detail.
 - state-local event declarations instead of global event maps
 - state lifecycle hooks through `enter(...)` and `exit(...)`
 - async request lifecycles driven by `enter(...)`, `effect(...)`, and `requestStep(...)`
+- state-scoped effect ownership so stale async completions do not write after a transition
 - delayed transitions and snapshot subscriptions for UI integration
 
 It is not the right tool yet when your workflow depends on:
 
 - child machines or actor-style composition
-- a richer cancellation model for long-running work
+- abortable long-running work with first-class cancellation signals
 - hierarchical, history, or parallel state semantics
 - persistence, restore, or dedicated devtools support
 
@@ -130,6 +131,7 @@ The current runtime guarantees:
 - external `instance.dispatch(...)` and `instance.send(...)` calls queue in order while work is active, and later queued events still settle even after an earlier failure
 - `start()` runs initial enter handlers once per instance
 - `destroy()` clears timers, prevents stale async completions from mutating the snapshot, and settles queued calls that never started
+- `effect(...)` work is owned by the active state execution, so leaving the state clears its pending effect names and makes stale completions inert
 - `schedule(...)` work is tied to the current state execution
 
 See the workspace [README.md](../../README.md) and [docs/execution-semantics.md](../../docs/execution-semantics.md) for the broader project status and detailed behavior rules.

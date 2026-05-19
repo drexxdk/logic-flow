@@ -24,6 +24,7 @@ The first version currently includes:
 - state transitions through explicit `goto(...)` with typed `states.*` refs
 - state lifecycle hooks through `enter(...)` and `exit(...)`
 - async effects with pending-effect tracking
+- state-scoped effect ownership so stale async completions become inert after a transition
 - delayed transitions via `schedule(...)`
 - instance lifecycle control through `start()`, `subscribe(...)`, and `destroy()`
 - frozen snapshot reads through `getSnapshot()` and `subscribe(...)`

@@ -193,6 +193,12 @@ class FlowExecutionTerminatedError extends Error {
 
 interface IExecutionContext {
   active: boolean;
+  stateExecutionId: number;
+}
+
+interface IActiveEffect {
+  readonly name: string;
+  readonly ownerStateExecutionId: number;
 }
 
 interface IQueuedDispatch<TEvent> {
@@ -464,9 +470,11 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   >();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly queue: IQueuedDispatch<TEvent>[] = [];
+  private readonly activeEffects: IActiveEffect[] = [];
   private isDestroyed = false;
   private hasStarted = false;
   private isProcessing = false;
+  private stateExecutionId = 0;
   private currentCompletion: IDispatchCompletion | undefined;
   private startPromise: Promise<FlowSnapshot<TContext, TState, TEvent>> | undefined;
   private snapshot: FlowSnapshot<TContext, TState, TEvent>;
@@ -657,6 +665,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     }
 
     this.runExitHandlers(undefined);
+    this.invalidateCurrentStateExecution();
 
     this.isDestroyed = true;
     const queuedCompletions = new Set(this.queue.map(({ completion }) => completion));
@@ -670,10 +679,6 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
 
     this.queue.length = 0;
     this.clearTimers();
-    this.snapshot = {
-      ...this.snapshot,
-      pendingEffects: [],
-    };
     this.listeners.clear();
   }
 
@@ -720,32 +725,59 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     return nextContext;
   }
 
-  private async runEffect<TResult>(name: string, task: () => Awaitable<TResult>): Promise<TResult> {
+  private syncPendingEffects(): void {
+    this.snapshot = {
+      ...this.snapshot,
+      pendingEffects: this.activeEffects
+        .filter((effect) => effect.ownerStateExecutionId === this.stateExecutionId)
+        .map((effect) => effect.name),
+    };
+  }
+
+  private invalidateCurrentStateExecution(): void {
+    const previousStateExecutionId = this.stateExecutionId;
+
+    this.stateExecutionId += 1;
+
+    const nextActiveEffects = this.activeEffects.filter(
+      (effect) => effect.ownerStateExecutionId !== previousStateExecutionId,
+    );
+
+    if (nextActiveEffects.length !== this.activeEffects.length) {
+      this.activeEffects.length = 0;
+      this.activeEffects.push(...nextActiveEffects);
+    }
+
+    this.syncPendingEffects();
+    this.notify();
+  }
+
+  private async runEffect<TResult>(
+    name: string,
+    task: () => Awaitable<TResult>,
+    ownerStateExecutionId: number,
+  ): Promise<TResult> {
     if (this.isDestroyed) {
       return undefined as TResult;
     }
 
-    this.snapshot = {
-      ...this.snapshot,
-      pendingEffects: [...this.snapshot.pendingEffects, name],
-    };
+    const effectEntry: IActiveEffect = { name, ownerStateExecutionId };
+
+    this.activeEffects.push(effectEntry);
+    this.syncPendingEffects();
     this.notify();
 
     try {
       return await task();
     } finally {
-      const nextPendingEffects = [...this.snapshot.pendingEffects];
-      const effectIndex = nextPendingEffects.lastIndexOf(name);
+      const effectIndex = this.activeEffects.indexOf(effectEntry);
 
       if (effectIndex >= 0) {
-        nextPendingEffects.splice(effectIndex, 1);
+        this.activeEffects.splice(effectIndex, 1);
       }
 
       if (!this.isDestroyed) {
-        this.snapshot = {
-          ...this.snapshot,
-          pendingEffects: nextPendingEffects,
-        };
+        this.syncPendingEffects();
         this.notify();
       }
     }
@@ -795,14 +827,17 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   private createApiBase(event: TEvent | undefined): FlowApi<TContext, TEvent, TState> {
     const readSnapshot = () => this.snapshot;
     const stateRefs = this.definition.getStates();
-    const execution: IExecutionContext = { active: true };
+    const execution: IExecutionContext = {
+      active: true,
+      stateExecutionId: this.stateExecutionId,
+    };
 
     const assertActive = () => {
       if (!execution.active) {
         throw new FlowExecutionTerminatedError('dispatch');
       }
 
-      return !this.isDestroyed;
+      return !this.isDestroyed && execution.stateExecutionId === this.stateExecutionId;
     };
 
     const dispatch: FlowApi<TContext, TEvent, TState>['dispatch'] = ((
@@ -864,7 +899,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
           return Promise.resolve(undefined as TResult);
         }
 
-        return this.runEffect(name, task);
+        return this.runEffect(name, task, execution.stateExecutionId);
       },
       schedule: (
         ms: number,
@@ -978,6 +1013,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     }
 
     this.runExitHandlers(event);
+    this.invalidateCurrentStateExecution();
     this.clearTimers();
     this.snapshot = {
       ...this.snapshot,

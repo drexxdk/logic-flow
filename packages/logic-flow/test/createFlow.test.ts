@@ -1082,6 +1082,109 @@ describe('createFlow', () => {
     vi.useRealTimers();
   });
 
+  it('clears pending effects when leaving the owning state before they settle', async () => {
+    vi.useFakeTimers();
+
+    const deferred = createDeferred<void>();
+
+    const flow = createFlow({
+      name: 'effect-transition-clear',
+      context: z.object({ staleWriteApplied: z.boolean() }),
+      states: ['waiting', 'done'] as const,
+      initial: 'waiting',
+      initialContext: { staleWriteApplied: false },
+    })
+      .step('waiting', ({ enter, states }) => [
+        enter(async ({ effect, schedule, update }) => {
+          schedule(50, ({ goto }) => {
+            goto(states.done);
+          });
+
+          await effect('persist', () => deferred.promise);
+          update({ staleWriteApplied: true });
+        }),
+      ])
+      .step('done');
+
+    const instance = flow.createInstance();
+    const startPromise = instance.start();
+
+    await Promise.resolve();
+
+    expect(instance.getSnapshot().pendingEffects).toEqual(['persist']);
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(instance.getSnapshot().state).toBe('done');
+    expect(instance.getSnapshot().pendingEffects).toEqual([]);
+
+    deferred.resolve();
+    await startPromise;
+
+    expect(instance.getSnapshot().context.staleWriteApplied).toBe(false);
+
+    vi.useRealTimers();
+  });
+
+  it('clears prior state-owned effects before self-reentry settles them', async () => {
+    vi.useFakeTimers();
+
+    const firstDeferred = createDeferred<void>();
+    const secondDeferred = createDeferred<void>();
+    let enterCount = 0;
+
+    const flow = createFlow({
+      name: 'effect-self-transition-clear',
+      context: z.object({ staleWriteApplied: z.boolean(), currentRun: z.number() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { staleWriteApplied: false, currentRun: 0 },
+    }).step('idle', ({ enter, on, states }) => [
+      enter(async ({ effect, update }) => {
+        enterCount += 1;
+        update({ currentRun: enterCount });
+
+        await effect('persist', () =>
+          enterCount === 1 ? firstDeferred.promise : secondDeferred.promise,
+        );
+
+        update({ staleWriteApplied: true });
+      }),
+      on('REENTER', {}, states.idle, ({ goto }) => {
+        goto(states.idle);
+      }),
+    ]);
+
+    const instance = flow.createInstance();
+    const startPromise = instance.start();
+
+    await Promise.resolve();
+
+    expect(instance.getSnapshot().pendingEffects).toEqual(['persist']);
+    expect(instance.getSnapshot().context.currentRun).toBe(1);
+
+    const reenterPromise = instance.dispatch({ type: 'REENTER' });
+
+    await Promise.resolve();
+
+    expect(instance.getSnapshot().pendingEffects).toEqual(['persist']);
+    expect(instance.getSnapshot().context.currentRun).toBe(2);
+
+    firstDeferred.resolve();
+    await startPromise;
+
+    expect(instance.getSnapshot().context.staleWriteApplied).toBe(false);
+    expect(instance.getSnapshot().pendingEffects).toEqual(['persist']);
+
+    secondDeferred.resolve();
+    await reenterPromise;
+
+    expect(instance.getSnapshot().context.staleWriteApplied).toBe(true);
+    expect(instance.getSnapshot().pendingEffects).toEqual([]);
+
+    vi.useRealTimers();
+  });
+
   it('rejects dispatch when an event handler throws', async () => {
     const flow = createFlow({
       name: 'handler-throws',
