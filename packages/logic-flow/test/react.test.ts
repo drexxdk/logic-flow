@@ -1,56 +1,15 @@
-import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import { createElement } from 'react';
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { createFlow, defineEvent, type FlowEvent } from '../src';
+import { createFlow, defineEvent } from '../src';
 import { useFlow } from '../src/react';
 
-interface HookRender<TContext, TEvent extends FlowEvent, TState extends string> {
-  instance: ReturnType<typeof useFlow<TContext, TEvent, TState>>['instance'];
-  snapshot: ReturnType<typeof useFlow<TContext, TEvent, TState>>['snapshot'];
-  send: ReturnType<typeof useFlow<TContext, TEvent, TState>>['send'];
-}
-
-function flushMicrotasks() {
-  return Promise.resolve();
-}
-
-function createUseFlowHarness<TContext, TEvent extends FlowEvent, TState extends string>(
-  definition: Parameters<typeof useFlow<TContext, TEvent, TState>>[0],
-) {
-  let renderer: ReactTestRenderer | undefined;
-  let latest: HookRender<TContext, TEvent, TState> | undefined;
-
-  function Harness() {
-    latest = useFlow(definition);
-    return null;
-  }
-
-  return {
-    async mount() {
-      await act(async () => {
-        renderer = create(createElement(Harness));
-        await flushMicrotasks();
-      });
-
-      return this;
-    },
-    latest() {
-      if (!latest) {
-        throw new Error('Harness did not render useFlow.');
-      }
-
-      return latest;
-    },
-    async unmount() {
-      await act(async () => {
-        renderer?.unmount();
-        await flushMicrotasks();
-      });
-    },
-  };
-}
+afterEach(() => {
+  cleanup();
+});
 
 describe('useFlow', () => {
   it('auto-starts the instance and reflects enter-driven updates in the snapshot', async () => {
@@ -66,11 +25,14 @@ describe('useFlow', () => {
       }),
     ]);
 
-    const harness = await createUseFlowHarness(flow).mount();
+    const { result } = renderHook(() => useFlow(flow));
 
-    expect(harness.latest().instance).not.toBeNull();
-    expect(harness.latest().snapshot.context).toEqual({ entered: 1 });
-    expect(Object.isFrozen(harness.latest().snapshot)).toBe(true);
+    await waitFor(() => {
+      expect(result.current.instance).not.toBeNull();
+      expect(result.current.snapshot.context).toEqual({ entered: 1 });
+    });
+
+    expect(Object.isFrozen(result.current.snapshot)).toBe(true);
   });
 
   it('supports sending reusable event definitions through the hook surface', async () => {
@@ -88,14 +50,19 @@ describe('useFlow', () => {
       }),
     ]);
 
-    const harness = await createUseFlowHarness(flow).mount();
+    const { result } = renderHook(() => useFlow(flow));
 
-    await act(async () => {
-      await harness.latest().send(synced, { itemCount: 3 });
-      await flushMicrotasks();
+    await waitFor(() => {
+      expect(result.current.instance).not.toBeNull();
     });
 
-    expect(harness.latest().snapshot.context).toEqual({ itemCount: 3 });
+    await act(async () => {
+      await result.current.send(synced, { itemCount: 3 });
+    });
+
+    await waitFor(() => {
+      expect(result.current.snapshot.context).toEqual({ itemCount: 3 });
+    });
   });
 
   it('rejects sends after the hook unmounts and destroys the backing instance', async () => {
@@ -111,10 +78,15 @@ describe('useFlow', () => {
       }),
     ]);
 
-    const harness = await createUseFlowHarness(flow).mount();
-    const { send } = harness.latest();
+    const { result, unmount } = renderHook(() => useFlow(flow));
 
-    await harness.unmount();
+    await waitFor(() => {
+      expect(result.current.instance).not.toBeNull();
+    });
+
+    const { send } = result.current;
+
+    unmount();
 
     await expect(send({ type: 'INC' })).rejects.toThrow(
       'Cannot send an event after the flow instance is inactive.',
