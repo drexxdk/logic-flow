@@ -57,6 +57,7 @@ Completed so far:
 - optional empty-state declaration with `.step('done')`
 - optional single-registration step returns for one-handler states
 - `requestStep(...)` for enter-driven async request states that dispatch typed success and failure events
+- inline event definitions are the default authoring path; `defineEvent(...)` is reserved for genuinely reused contracts
 
 ### Demo
 
