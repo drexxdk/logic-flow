@@ -125,7 +125,9 @@ This is deliberate. The package currently favors that explicit return-value shap
 - dispatching typed success or failure events
 - keeping the resulting registrations part of the normal step contract
 
-It can use either inline `type` and `shape` fields or reusable `event: defineEvent(...)` definitions for its success and failure contracts.
+It can use either inline `type` and `shape` fields or reusable `event: defineEvent(...)` definitions for its success, failure, and optional cancel contracts.
+
+When you provide `cancel`, `requestStep(...)` also registers that event as part of the same helper and lets that cancel transition run while the request work is still active.
 
 Cooperative cancellation is treated separately from failure. If `config.run(...)` ends because the active execution was cancelled, `requestStep(...)` does not call `mapError(...)` or dispatch the failure event.
 
@@ -137,6 +139,7 @@ import { z } from 'zod';
 
 const saved = defineEvent('SAVED', {});
 const failed = defineEvent('FAILED', { message: z.string() });
+const cancelled = defineEvent('CANCEL', {});
 
 const flow = createFlow({
   name: 'save-flow',
@@ -157,6 +160,14 @@ const flow = createFlow({
         await effect('persist', async () => {
           await Promise.resolve();
         });
+      },
+      cancel: {
+        event: cancelled,
+        target: api.states.idle,
+        handle: ({ goto, update }) => {
+          update({ error: undefined });
+          goto(api.states.idle);
+        },
       },
       success: {
         event: saved,

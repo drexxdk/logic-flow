@@ -200,12 +200,19 @@ const publishSucceeded = defineEvent('PUBLISHED', {});
     }),
   )
 /* @typed */   .step('publishing', (api) =>
-    [
-/* @typed */       ...requestStep(api, {
+/* @typed */     requestStep(api, {
         run: ({ effect }) =>
           effect('publishRequest', async (signal) => {
             await wait(1000, signal);
           }),
+        cancel: {
+          event: cancelPublish,
+          target: api.states.draft,
+          handle: ({ goto, update }) => {
+            update({ error: undefined, notice: 'Publishing cancelled.' });
+            goto(api.states.draft);
+          },
+        },
         success: {
           event: publishSucceeded,
           target: api.states.published,
@@ -224,11 +231,6 @@ const publishSucceeded = defineEvent('PUBLISHED', {});
           },
         },
       }),
-      api.on(cancelPublish, api.states.draft, ({ goto, update }) => {
-        update({ error: undefined, notice: 'Publishing cancelled.' });
-        goto(api.states.draft);
-      }),
-    ],
   )
   .step('published', ({ enter, states }) =>
     enter(states.draft, ({ schedule }) => {
@@ -241,6 +243,6 @@ const publishSucceeded = defineEvent('PUBLISHED', {});
   typedReasons: [
     'The logic-flow version still keeps the runtime schema and inferred context type in one place, even after inlining the one-off XState types for fairness.',
     'Normal `if` and `else` branching replaces the guard-array encoding while still narrowing `goto(...)` to the declared submit targets.',
-    '`requestStep(...)` now accepts reusable event definitions, so the async request path stays compact without giving up typed external events or cancellation-safe behavior.',
+    '`requestStep(...)` now keeps success, failure, and cancel transitions inside one helper call while still using reusable typed event definitions.',
   ],
 };

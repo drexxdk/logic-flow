@@ -23,6 +23,7 @@ Completed so far:
 - added `createInstance({ autoStart: true })` and `instance.send(...)` as small consumer-facing ergonomics
 - added `.step('done')` support for empty states without weakening event inference
 - added `requestStep(...)` as the first higher-level helper for async request states
+- added optional cancel-event support to `requestStep(...)`, including reusable event definitions and active-request cancellation handling
 - narrowed the top-level public export surface to consumer-facing types and values only
 - documented the intended `0.1.x` public API contract and package entrypoint surface
 - audited the publishable package contents with `pnpm --filter logic-flow pack --dry-run`

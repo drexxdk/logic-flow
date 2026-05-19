@@ -71,12 +71,20 @@ export const publishingFlow = createFlow({
       goto(states.publishing);
     }),
   )
-  .step('publishing', (api) => [
-    ...requestStep(api, {
+  .step('publishing', (api) =>
+    requestStep(api, {
       run: ({ effect }) =>
         effect('publishRequest', async (signal) => {
           await wait(1000, signal);
         }),
+      cancel: {
+        event: cancelPublish,
+        target: api.states.draft,
+        handle: ({ goto, update }) => {
+          update({ error: undefined, notice: 'Publishing cancelled.' });
+          goto(api.states.draft);
+        },
+      },
       success: {
         event: publishSucceeded,
         target: api.states.published,
@@ -95,11 +103,7 @@ export const publishingFlow = createFlow({
         },
       },
     }),
-    api.on(cancelPublish, api.states.draft, ({ goto, update }) => {
-      update({ error: undefined, notice: 'Publishing cancelled.' });
-      goto(api.states.draft);
-    }),
-  ])
+  )
   .step('published', ({ enter, states }) =>
     enter(states.draft, ({ schedule }) => {
       schedule(1500, ({ goto, update }) => {

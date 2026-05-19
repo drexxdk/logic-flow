@@ -121,11 +121,12 @@ The return-value-based step shape is part of that inference story today.
 
 ## Request Helpers
 
-`requestStep(...)` can now consume reusable `defineEvent(...)` definitions for its success and failure events, which keeps async request helpers compact without giving up typed internal dispatch or reusable external event contracts.
+`requestStep(...)` can now consume reusable `defineEvent(...)` definitions for its success, failure, and optional cancel events, which keeps async request helpers compact without giving up typed internal dispatch or reusable external event contracts.
 
 ```ts
 const saved = defineEvent('SAVED', {});
 const failed = defineEvent('FAILED', { message: z.string() });
+const cancelled = defineEvent('CANCEL', {});
 
 .step('saving', (api) =>
   requestStep(api, {
@@ -133,6 +134,13 @@ const failed = defineEvent('FAILED', { message: z.string() });
       await effect('persist', async () => {
         await Promise.resolve();
       });
+    },
+    cancel: {
+      event: cancelled,
+      target: api.states.idle,
+      handle: ({ goto }) => {
+        goto(api.states.idle);
+      },
     },
     success: {
       event: saved,
@@ -155,6 +163,8 @@ const failed = defineEvent('FAILED', { message: z.string() });
 ```
 
 Cooperative cancellation still stays out of the failure path. If `run(...)` ends because the active execution was cancelled, `requestStep(...)` skips `mapError(...)` and does not dispatch the failure event.
+
+When `cancel` is present, that cancel event can also transition the flow out of the request state while the request work is still active.
 
 When you want to immediately run the initial enter lifecycle, you can create an instance with:
 

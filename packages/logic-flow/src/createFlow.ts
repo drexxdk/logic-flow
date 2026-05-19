@@ -368,15 +368,28 @@ interface RequestStepConfig<
   TSuccessShape extends EventShape,
   TFailureType extends string,
   TFailureShape extends EventShape,
+  TCancelType extends string = never,
+  TCancelShape extends EventShape = EmptyEventShape,
 > {
   run: (
     api: FlowEnterApi<TContext, TAllEvents, TState>,
   ) => Awaitable<RequestStepRunResult<TSuccessShape>>;
+  cancel?: RequestStepTransitionConfig<
+    TContext,
+    | TAllEvents
+    | EventFromShape<TSuccessType, TSuccessShape>
+    | EventFromShape<TFailureType, TFailureShape>
+    | EventFromShape<TCancelType, TCancelShape>,
+    TState,
+    TCancelType,
+    TCancelShape
+  >;
   success: RequestStepTransitionConfig<
     TContext,
     | TAllEvents
     | EventFromShape<TSuccessType, TSuccessShape>
-    | EventFromShape<TFailureType, TFailureShape>,
+    | EventFromShape<TFailureType, TFailureShape>
+    | EventFromShape<TCancelType, TCancelShape>,
     TState,
     TSuccessType,
     TSuccessShape
@@ -385,7 +398,8 @@ interface RequestStepConfig<
     TContext,
     | TAllEvents
     | EventFromShape<TSuccessType, TSuccessShape>
-    | EventFromShape<TFailureType, TFailureShape>,
+    | EventFromShape<TFailureType, TFailureShape>
+    | EventFromShape<TCancelType, TCancelShape>,
     TState,
     TFailureType,
     TFailureShape
@@ -1234,7 +1248,10 @@ function hasEventDefinitionShapeFields(
 }
 
 function resolveRequestStepEventDefinition<const TType extends string, TShape extends EventShape>(
-  config: Pick<RequestStepTransitionConfig<unknown, FlowEvent, string, TType, TShape>, 'event' | 'type' | 'shape'>,
+  config: Pick<
+    RequestStepTransitionConfig<unknown, FlowEvent, string, TType, TShape>,
+    'event' | 'type' | 'shape'
+  >,
 ): InternalFlowEventDefinition<TType, TShape> {
   if (config.event) {
     if (!isFlowEventDefinition(config.event)) {
@@ -1305,6 +1322,8 @@ export function requestStep<
   TSuccessShape extends EventShape,
   const TFailureType extends string,
   TFailureShape extends EventShape,
+  const TCancelType extends string = never,
+  TCancelShape extends EventShape = EmptyEventShape,
 >(
   api: Pick<IStepRegistrar<TContext, TAllEvents, TState>, 'enter' | 'on'>,
   config: RequestStepConfig<
@@ -1314,38 +1333,58 @@ export function requestStep<
     TSuccessType,
     TSuccessShape,
     TFailureType,
-    TFailureShape
+    TFailureShape,
+    TCancelType,
+    TCancelShape
   >,
 ): readonly [
   EnterRegistration<TState, readonly TState[]>,
   EventRegistration<TState, TSuccessType, TSuccessShape, readonly TState[]>,
   EventRegistration<TState, TFailureType, TFailureShape, readonly TState[]>,
+  ...Array<EventRegistration<TState, TCancelType, TCancelShape, readonly TState[]>>,
 ] {
+  const cancel = config.cancel
+    ? createRequestStepEventRegistration(api.on, config.cancel)
+    : undefined;
   const success = createRequestStepEventRegistration(api.on, config.success);
   const failure = createRequestStepEventRegistration(api.on, config.failure);
+  const runRequest = async (enterApi: FlowEnterApi<TContext, TAllEvents, TState>) => {
+    try {
+      const successPayload = await config.run(enterApi);
+
+      if (hasEventDefinitionShapeFields(success) || typeof successPayload !== 'undefined') {
+        await enterApi.dispatch(success, successPayload as EventPayload<TSuccessShape>);
+      } else {
+        await enterApi.dispatch(success, {} as EventPayload<TSuccessShape>);
+      }
+    } catch (error) {
+      if (isFlowCancellationError(error)) {
+        return;
+      }
+
+      const failurePayload = await config.failure.mapError(error, enterApi);
+      await enterApi.dispatch(failure, failurePayload);
+    }
+  };
 
   return [
-    api.enter(async (enterApi) => {
-      try {
-        const successPayload = await config.run(enterApi);
-
-        if (hasEventDefinitionShapeFields(success) || typeof successPayload !== 'undefined') {
-          await enterApi.dispatch(success, successPayload as EventPayload<TSuccessShape>);
-        } else {
-          await enterApi.dispatch(success, {} as EventPayload<TSuccessShape>);
-        }
-      } catch (error) {
-        if (isFlowCancellationError(error)) {
-          return;
-        }
-
-        const failurePayload = await config.failure.mapError(error, enterApi);
-        await enterApi.dispatch(failure, failurePayload);
+    api.enter((enterApi) => {
+      if (cancel) {
+        void runRequest(enterApi);
+        return;
       }
+
+      return runRequest(enterApi);
     }),
     success,
     failure,
-  ] as const;
+    ...(cancel ? [cancel] : []),
+  ] as readonly [
+    EnterRegistration<TState, readonly TState[]>,
+    EventRegistration<TState, TSuccessType, TSuccessShape, readonly TState[]>,
+    EventRegistration<TState, TFailureType, TFailureShape, readonly TState[]>,
+    ...Array<EventRegistration<TState, TCancelType, TCancelShape, readonly TState[]>>,
+  ];
 }
 
 export function createFlow<

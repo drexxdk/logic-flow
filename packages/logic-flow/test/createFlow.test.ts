@@ -318,6 +318,91 @@ describe('createFlow', () => {
     });
   });
 
+  it('supports requestStep cancel events without manual neighboring registrations', async () => {
+    const deferred = createDeferred<void>();
+    const cancelled = defineEvent('CANCEL', {});
+    const saved = defineEvent('SAVED', {});
+    const failed = defineEvent('FAILED', { message: z.string() });
+
+    const flow = createFlow({
+      name: 'request-step-cancel',
+      context: z.object({ saved: z.boolean(), notice: z.string().optional() }),
+      states: ['idle', 'saving', 'done'] as const,
+      initial: 'idle',
+      initialContext: { saved: false },
+    })
+      .step('idle', ({ on, states }) =>
+        on('SAVE', {}, states.saving, ({ goto, update }) => {
+          update({ notice: undefined });
+          goto(states.saving);
+        }),
+      )
+      .step('saving', (api) =>
+        requestStep(api, {
+          run: async ({ effect }) => {
+            await effect('persist', () => deferred.promise);
+          },
+          cancel: {
+            event: cancelled,
+            target: api.states.idle,
+            handle: ({ goto, update }) => {
+              update({ notice: 'cancelled' });
+              goto(api.states.idle);
+            },
+          },
+          success: {
+            event: saved,
+            target: api.states.done,
+            handle: ({ goto, update }) => {
+              update({ saved: true, notice: undefined });
+              goto(api.states.done);
+            },
+          },
+          failure: {
+            event: failed,
+            target: api.states.idle,
+            mapError: () => ({ message: 'Save failed.' }),
+          },
+        }),
+      )
+      .step('done');
+
+    const instance = flow.createInstance();
+    const assertExternalSendTypes = () => {
+      void instance.send(cancelled);
+      void instance.send(saved);
+      void instance.send(failed, { message: 'typed failure from definition' });
+
+      // @ts-expect-error CANCEL does not take a payload.
+      void instance.send(cancelled, {});
+    };
+
+    void assertExternalSendTypes;
+
+    const dispatchPromise = instance.dispatch({ type: 'SAVE' });
+
+    await Promise.resolve();
+    await instance.send(cancelled);
+
+    deferred.resolve();
+    await dispatchPromise;
+
+    expect(instance.getSnapshot()).toMatchObject({
+      state: 'idle',
+      context: { saved: false, notice: 'cancelled' },
+      pendingEffects: [],
+    });
+    expect(flow.transitions).toEqual({
+      idle: [{ kind: 'event', event: 'SAVE', targets: ['saving'] }],
+      saving: [
+        { kind: 'event', event: 'SAVED', targets: ['done'] },
+        { kind: 'event', event: 'FAILED', targets: ['idle'] },
+        { kind: 'event', event: 'CANCEL', targets: ['idle'] },
+      ],
+      done: [],
+    });
+  });
+
   it('types internal dispatch against registered events', () => {
     createFlow({
       name: 'typed-internal-dispatch',
