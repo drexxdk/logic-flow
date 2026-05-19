@@ -38,7 +38,7 @@ This is intentionally narrow. It is a proof of concept for the authoring model, 
 
 The current package entrypoint is intentionally small. Treat this as the supported `0.1.x` contract:
 
-- runtime values: `createFlow`, `defineEvent`, `requestStep`, and `FlowInstance`
+- runtime values: `createFlow`, `defineEvent`, `requestStep`, `FlowInstance`, `FlowCancellationError`, and `isFlowCancellationError`
 - public types: `FlowBuilder`, `FlowDefinition`, `FlowEvent`, `FlowEventDefinition`, `FlowInstanceOptions`, and `FlowSnapshot`
 
 Everything else in the runtime implementation should be considered internal, even if it appears in source-level examples or can be inferred from the code. Higher-level helpers should keep building on top of this surface instead of reaching into builder internals.
@@ -118,6 +118,43 @@ What this buys you:
 - the flow exposes the full inferred event union to `dispatch(...)`
 
 The return-value-based step shape is part of that inference story today.
+
+## Request Helpers
+
+`requestStep(...)` can now consume reusable `defineEvent(...)` definitions for its success and failure events, which keeps async request helpers compact without giving up typed internal dispatch or reusable external event contracts.
+
+```ts
+const saved = defineEvent('SAVED', {});
+const failed = defineEvent('FAILED', { message: z.string() });
+
+.step('saving', (api) =>
+  requestStep(api, {
+    run: async ({ effect }) => {
+      await effect('persist', async () => {
+        await Promise.resolve();
+      });
+    },
+    success: {
+      event: saved,
+      target: api.states.done,
+      handle: ({ goto }) => {
+        goto(api.states.done);
+      },
+    },
+    failure: {
+      event: failed,
+      target: api.states.idle,
+      mapError: () => ({ message: 'Save failed.' }),
+      handle: ({ event, goto, update }) => {
+        update({ error: event.message });
+        goto(api.states.idle);
+      },
+    },
+  }),
+)
+```
+
+Cooperative cancellation still stays out of the failure path. If `run(...)` ends because the active execution was cancelled, `requestStep(...)` skips `mapError(...)` and does not dispatch the failure event.
 
 When you want to immediately run the initial enter lifecycle, you can create an instance with:
 

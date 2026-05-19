@@ -125,9 +125,60 @@ This is deliberate. The package currently favors that explicit return-value shap
 - dispatching typed success or failure events
 - keeping the resulting registrations part of the normal step contract
 
+It can use either inline `type` and `shape` fields or reusable `event: defineEvent(...)` definitions for its success and failure contracts.
+
 Cooperative cancellation is treated separately from failure. If `config.run(...)` ends because the active execution was cancelled, `requestStep(...)` does not call `mapError(...)` or dispatch the failure event.
 
 When a success event has no payload, omit `shape` and let `run(...)` return `void`.
+
+```ts
+import { createFlow, defineEvent, requestStep } from 'logic-flow';
+import { z } from 'zod';
+
+const saved = defineEvent('SAVED', {});
+const failed = defineEvent('FAILED', { message: z.string() });
+
+const flow = createFlow({
+  name: 'save-flow',
+  context: z.object({ saved: z.boolean(), error: z.string().optional() }),
+  states: ['idle', 'saving', 'done'] as const,
+  initial: 'idle',
+  initialContext: { saved: false },
+})
+  .step('idle', ({ on, states }) =>
+    on('SAVE', {}, states.saving, ({ goto, update }) => {
+      update({ error: undefined });
+      goto(states.saving);
+    }),
+  )
+  .step('saving', (api) =>
+    requestStep(api, {
+      run: async ({ effect }) => {
+        await effect('persist', async () => {
+          await Promise.resolve();
+        });
+      },
+      success: {
+        event: saved,
+        target: api.states.done,
+        handle: ({ goto, update }) => {
+          update({ saved: true, error: undefined });
+          goto(api.states.done);
+        },
+      },
+      failure: {
+        event: failed,
+        target: api.states.idle,
+        mapError: () => ({ message: 'Save failed.' }),
+        handle: ({ event, goto, update }) => {
+          update({ error: event.message });
+          goto(api.states.idle);
+        },
+      },
+    }),
+  )
+  .step('done');
+```
 
 ## Runtime Semantics
 
