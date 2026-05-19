@@ -18,10 +18,11 @@ The goal is to keep the good parts of explicit workflows and named states, while
 The first version currently includes:
 
 - a small runtime for creating flows from typed context schemas and step-local events
-- named steps with typed event handlers
+- named steps with typed event handlers and lifecycle hooks
 - a `requestStep(...)` helper for async request states that emit typed success and failure events
 - context updates through explicit `update(...)`
 - state transitions through explicit `goto(...)` with typed `states.*` refs
+- state lifecycle hooks through `enter(...)` and `exit(...)`
 - async effects with pending-effect tracking
 - delayed transitions via `schedule(...)`
 - instance lifecycle control through `start()`, `subscribe(...)`, and `destroy()`

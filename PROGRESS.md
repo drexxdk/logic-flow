@@ -12,6 +12,7 @@ Completed so far:
 - implemented the first `createFlow(...)` runtime and builder API
 - added Zod-validated context and event schemas
 - added support for typed handlers, `update(...)`, `goto(...)`, `effect(...)`, and `schedule(...)`
+- added state lifecycle support through `enter(...)` and synchronous `exit(...)`
 - hardened builder validation for duplicate states, duplicate events in a step, and missing step definitions
 - made `destroy()` terminal and inert so stale async completions and later external dispatches stop mutating state
 - made `start()` idempotent per instance
@@ -43,6 +44,7 @@ Completed so far:
 - context validation and event validation with Zod
 - explicit named states
 - pending effect tracking
+- enter and exit lifecycle hooks
 - delayed enter-time transitions
 - transition metadata exposed on `flow.transitions`
 - instance lifecycle control with `start()`, `destroy()`, and `subscribe(...)`

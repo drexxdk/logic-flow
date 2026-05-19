@@ -450,6 +450,40 @@ describe('createFlow', () => {
     expect(instance.getSnapshot().state).toBe('success');
   });
 
+  it('runs exit handlers before entering the next state', async () => {
+    const order: string[] = [];
+
+    const flow = createFlow({
+      name: 'exit-before-enter',
+      context: z.object({ done: z.boolean() }),
+      states: ['idle', 'done'] as const,
+      initial: 'idle',
+      initialContext: { done: false },
+    })
+      .step('idle', ({ exit, on, states }) => [
+        exit(({ event, state }) => {
+          const eventType = (event as { type?: string } | undefined)?.type ?? 'none';
+          order.push(`exit:${state}:${eventType}`);
+        }),
+        on('COMPLETE', {}, states.done, ({ goto }) => {
+          order.push('before-goto');
+          goto(states.done);
+        }),
+      ])
+      .step('done', ({ enter }) => [
+        enter(() => {
+          order.push('enter-done');
+        }),
+      ]);
+
+    const instance = flow.createInstance();
+
+    await instance.dispatch({ type: 'COMPLETE' });
+
+    expect(order).toEqual(['before-goto', 'exit:idle:COMPLETE', 'enter-done']);
+    expect(instance.getSnapshot().state).toBe('done');
+  });
+
   it('prevents further flow api calls after an internal dispatch', async () => {
     const flow = createFlow({
       name: 'dispatch-terminal',
@@ -694,6 +728,30 @@ describe('createFlow', () => {
     expect(instance.getSnapshot().state).toBe('saving');
     expect(instance.getSnapshot().context.saved).toBe(false);
     expect(instance.getSnapshot().pendingEffects).toEqual([]);
+  });
+
+  it('runs exit handlers when an instance is destroyed', () => {
+    const order: string[] = [];
+
+    const flow = createFlow({
+      name: 'destroy-exit',
+      context: z.object({ ready: z.boolean() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { ready: false },
+    }).step('idle', ({ exit }) => [
+      exit(({ event, state, getSnapshot }) => {
+        const eventType = (event as { type?: string } | undefined)?.type ?? 'none';
+        order.push(`exit:${state}:${eventType}`);
+        order.push(`snapshot:${getSnapshot().state}`);
+      }),
+    ]);
+
+    const instance = flow.createInstance();
+
+    instance.destroy();
+
+    expect(order).toEqual(['exit:idle:none', 'snapshot:idle']);
   });
 
   it('ignores external dispatch after destroy', async () => {

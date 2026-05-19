@@ -1,6 +1,6 @@
 # Execution Semantics
 
-This document describes the runtime rules that matter when writing `logic-flow` handlers and `enter(...)` hooks.
+This document describes the runtime rules that matter when writing `logic-flow` handlers and lifecycle hooks such as `enter(...)` and `exit(...)`.
 
 The examples here assume the supported array-returning step registration form, for example `.step('idle', ({ on }) => [on(...)])`. That shape is not just stylistic in the current implementation; it is how `logic-flow` preserves the inferred event union exposed through external `dispatch(...)` and `send(...)`.
 
@@ -142,6 +142,14 @@ Snapshot reads through `getSnapshot()` and `subscribe(...)` are exposed as froze
 Calling `start()` multiple times on the same instance does not replay the initial enter lifecycle.
 
 This keeps instance startup idempotent for UI integrations that may call startup more than once by mistake or through overlapping effects.
+
+### `exit(...)` runs before leaving a state
+
+When a transition leaves the current state, that state's `exit(...)` handlers run before timers are cleared, the next state is committed, and the next state's `enter(...)` handlers begin.
+
+The same rule applies during `destroy()`: the current state's `exit(...)` handlers run once before the instance becomes inert.
+
+`exit(...)` is intended for synchronous cleanup and observation of the state being left. Its API exposes the current snapshot, state refs, and the triggering event when one exists.
 
 ### `destroy()` makes the instance inert
 

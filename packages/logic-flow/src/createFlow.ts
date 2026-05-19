@@ -78,6 +78,14 @@ interface FlowEnterApi<
   readonly event: TAllEvents | undefined;
 }
 
+interface FlowExitApi<TContext, TAllEvents extends FlowEvent, TState extends string> {
+  readonly ctx: TContext;
+  readonly state: TState;
+  readonly states: FlowStateRefs<TState>;
+  readonly event: TAllEvents | undefined;
+  getSnapshot(): FlowSnapshot<TContext, TState, TAllEvents>;
+}
+
 type FlowHandler<
   TContext,
   TAllEvents extends FlowEvent,
@@ -92,6 +100,10 @@ type FlowEnterHandler<
   TState extends string,
   TGotoState extends TState = TState,
 > = (api: FlowEnterApi<TContext, TEvent, TState, TGotoState>) => Awaitable<void>;
+
+type FlowExitHandler<TContext, TEvent extends FlowEvent, TState extends string> = (
+  api: FlowExitApi<TContext, TEvent, TState>,
+) => void;
 
 type EventShape = z.ZodRawShape;
 type EmptyEventShape = Record<never, z.ZodTypeAny>;
@@ -140,9 +152,15 @@ interface EnterRegistration<TState extends string, TTargets extends FlowTransiti
   handler: unknown;
 }
 
+interface ExitRegistration {
+  kind: 'exit';
+  handler: unknown;
+}
+
 type StepRegistration<TState extends string> =
   | EventRegistration<TState, string, EventShape, FlowTransitionTargets<TState>>
-  | EnterRegistration<TState, FlowTransitionTargets<TState>>;
+  | EnterRegistration<TState, FlowTransitionTargets<TState>>
+  | ExitRegistration;
 
 type StepEvent<TRegistration> =
   TRegistration extends EventRegistration<string, infer TType, infer TShape, readonly string[]>
@@ -159,6 +177,7 @@ type StepRegistrationResult<TState extends string> =
 interface IStepDefinition<TContext, TAllEvents extends FlowEvent, TState extends string> {
   handlers: Partial<Record<string, FlowHandler<TContext, TAllEvents, TState, FlowEvent>>>;
   enterHandlers: Array<FlowEnterHandler<TContext, TAllEvents, TState>>;
+  exitHandlers: Array<FlowExitHandler<TContext, TAllEvents, TState>>;
   transitions: readonly FlowTransitionDescriptor<TState>[];
 }
 
@@ -285,6 +304,7 @@ interface IStepRegistrar<TContext, TAllEvents extends FlowEvent, TState extends 
     targets: FlowTransitionInput<TState, TTargets>,
     handler: FlowEnterHandler<TContext, TAllEvents, TState, TTargets[number]>,
   ): EnterRegistration<TState, TTargets>;
+  exit(handler: FlowExitHandler<TContext, TAllEvents, TState>): ExitRegistration;
 }
 
 interface RequestStepTransitionConfig<
@@ -488,7 +508,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     }
 
     this.listeners.add(listener);
-  listener(this.createPublicSnapshot());
+    listener(this.createPublicSnapshot());
 
     return () => {
       this.listeners.delete(listener);
@@ -636,6 +656,8 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
       return;
     }
 
+    this.runExitHandlers(undefined);
+
     this.isDestroyed = true;
     const queuedCompletions = new Set(this.queue.map(({ completion }) => completion));
 
@@ -669,9 +691,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
       state: this.snapshot.state,
       context: cloneValue(this.snapshot.context),
       pendingEffects: [...this.snapshot.pendingEffects],
-      ...(this.snapshot.lastEvent
-        ? { lastEvent: cloneValue(this.snapshot.lastEvent) }
-        : {}),
+      ...(this.snapshot.lastEvent ? { lastEvent: cloneValue(this.snapshot.lastEvent) } : {}),
     });
   }
 
@@ -886,6 +906,23 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     };
   }
 
+  private createExitApi(event: TEvent | undefined): FlowExitApi<TContext, TEvent, TState> {
+    const readSnapshot = () => this.snapshot;
+    const stateRefs = this.definition.getStates();
+
+    return {
+      get ctx() {
+        return readSnapshot().context;
+      },
+      get state() {
+        return readSnapshot().state;
+      },
+      states: stateRefs,
+      event,
+      getSnapshot: () => this.createPublicSnapshot(),
+    };
+  }
+
   private isTransitionSignal(error: unknown): error is FlowTransitionSignal<TState> {
     return error instanceof FlowTransitionSignal;
   }
@@ -940,6 +977,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
       return;
     }
 
+    this.runExitHandlers(event);
     this.clearTimers();
     this.snapshot = {
       ...this.snapshot,
@@ -948,6 +986,18 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     this.notify();
 
     await this.runEnterHandlers(event);
+  }
+
+  private runExitHandlers(event: TEvent | undefined): void {
+    if (this.isDestroyed) {
+      return;
+    }
+
+    const step = this.definition.getStep(this.snapshot.state);
+
+    for (const exitHandler of step.exitHandlers) {
+      exitHandler(this.createExitApi(event));
+    }
   }
 
   private async runEnterHandlers(event: TEvent | undefined): Promise<void> {
@@ -1264,6 +1314,7 @@ export function createFlow<
       const definition: IStepDefinition<TContext, FlowEvent, TState> = {
         handlers: {},
         enterHandlers: [],
+        exitHandlers: [],
         transitions: [],
       };
 
@@ -1329,6 +1380,10 @@ export function createFlow<
             handler,
           };
         }) as IStepRegistrar<TContext, TAllEvents, TState>['enter'],
+        exit: ((handler: FlowExitHandler<TContext, FlowEvent, TState>) => ({
+          kind: 'exit',
+          handler,
+        })) as IStepRegistrar<TContext, TAllEvents, TState>['exit'],
       };
 
       const registrations = register ? normalizeStepRegistrations(register(registrar)) : [];
@@ -1347,6 +1402,13 @@ export function createFlow<
               },
             ];
           }
+          continue;
+        }
+
+        if (registration.kind === 'exit') {
+          definition.exitHandlers.push(
+            registration.handler as FlowExitHandler<TContext, FlowEvent, TState>,
+          );
           continue;
         }
 

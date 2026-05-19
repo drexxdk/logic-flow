@@ -33,13 +33,14 @@ Anything else in the source should be treated as internal implementation detail.
 - flat named workflows with explicit state transitions
 - typed event payloads validated with Zod
 - state-local event declarations instead of global event maps
+- state lifecycle hooks through `enter(...)` and `exit(...)`
 - async request lifecycles driven by `enter(...)`, `effect(...)`, and `requestStep(...)`
 - delayed transitions and snapshot subscriptions for UI integration
 
 It is not the right tool yet when your workflow depends on:
 
 - child machines or actor-style composition
-- exit hooks or a richer cancellation model for long-running work
+- a richer cancellation model for long-running work
 - hierarchical, history, or parallel state semantics
 - persistence, restore, or dedicated devtools support
 
@@ -60,7 +61,7 @@ The main difference is authoring style: `logic-flow` keeps branching and workflo
 
 ## Authoring Model
 
-Flows define shared context and state names up front, then attach state-local event handlers and `enter(...)` hooks step by step.
+Flows define shared context and state names up front, then attach state-local event handlers and lifecycle hooks step by step.
 
 ```ts
 import { createFlow } from 'logic-flow';
@@ -124,6 +125,7 @@ The current runtime guarantees:
 
 - `goto(...)` is terminal inside a handler or `enter(...)` hook
 - internal flow-api `dispatch(...)` is also terminal within the current execution
+- `exit(...)` runs before a state is left, including teardown through `destroy()`
 - `getSnapshot()` and `subscribe(...)` expose frozen snapshot copies so consumers cannot mutate runtime state out of band
 - external `instance.dispatch(...)` and `instance.send(...)` calls queue in order while work is active, and later queued events still settle even after an earlier failure
 - `start()` runs initial enter handlers once per instance
