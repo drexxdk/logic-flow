@@ -29,6 +29,8 @@ const wait = (ms: number, signal?: AbortSignal) =>
 const cancelPublish = defineEvent('CANCEL', {});
 const publishFailed = defineEvent('FAILED', { message: z.string() });
 const publishSucceeded = defineEvent('PUBLISHED', {});
+export const publishRequestMs = 2500;
+export const publishResultVisibleMs = 3000;
 
 export const publishingFlow = createFlow({
   name: 'publishing-demo',
@@ -75,7 +77,7 @@ export const publishingFlow = createFlow({
     requestStep(api, {
       run: ({ effect }) =>
         effect('publishRequest', async (signal) => {
-          await wait(1000, signal);
+          await wait(publishRequestMs, signal);
         }),
       cancel: {
         event: cancelPublish,
@@ -106,7 +108,7 @@ export const publishingFlow = createFlow({
   )
   .step('published', ({ enter, states }) =>
     enter(states.draft, ({ schedule }) => {
-      schedule(1500, ({ goto, update }) => {
+      schedule(publishResultVisibleMs, ({ goto, update }) => {
         update({ published: false, notice: undefined });
         goto(states.draft);
       });

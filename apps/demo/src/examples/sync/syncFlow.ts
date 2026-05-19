@@ -1,4 +1,4 @@
-import { createFlow, defineEvent } from 'logic-flow';
+import { createFlow, defineEvent, requestStep } from 'logic-flow';
 import { z } from 'zod';
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -39,29 +39,31 @@ export const syncFlow = createFlow({
       update({ shouldFail: !ctx.shouldFail });
     }),
   ])
-  .step('syncing', ({ enter, on, states }) => {
-    const failed = on(syncFailed, states.failed, ({ event, goto, update }) => {
-      update({ error: event.message });
-      goto(states.failed);
-    });
-    const synced = on(syncCompleted, states.synced, ({ event, goto, update }) => {
-      update({ syncedItems: event.itemCount, error: undefined });
-      goto(states.synced);
-    });
-
-    return [
-      enter(async ({ ctx, dispatch, effect }) => {
-        try {
-          const itemCount = await effect('catalogSync', async () => runSyncRequest(ctx.shouldFail));
-          await dispatch(synced, { itemCount });
-        } catch {
-          await dispatch(failed, { message: 'Initial sync failed. Toggle failure and retry.' });
-        }
-      }),
-      failed,
-      synced,
-    ];
-  })
+  .step('syncing', (api) =>
+    requestStep(api, {
+      run: async ({ ctx, effect }) => {
+        const itemCount = await effect('catalogSync', async () => runSyncRequest(ctx.shouldFail));
+        return { itemCount };
+      },
+      success: {
+        event: syncCompleted,
+        target: api.states.synced,
+        handle: ({ event, goto, update }) => {
+          update({ syncedItems: event.itemCount, error: undefined });
+          goto(api.states.synced);
+        },
+      },
+      failure: {
+        event: syncFailed,
+        target: api.states.failed,
+        mapError: () => ({ message: 'Initial sync failed. Toggle failure and retry.' }),
+        handle: ({ event, goto, update }) => {
+          update({ error: event.message });
+          goto(api.states.failed);
+        },
+      },
+    }),
+  )
   .step('failed', ({ on, states }) => [
     on('RETRY', {}, states.retrying, ({ goto, update }) => {
       update({ error: undefined, lastAttempt: 'retrying' });
@@ -75,31 +77,33 @@ export const syncFlow = createFlow({
       goto(states.idle);
     }),
   ])
-  .step('retrying', ({ enter, on, states }) => {
-    const failed = on(syncFailed, states.failed, ({ event, goto, update }) => {
-      update({ error: event.message });
-      goto(states.failed);
-    });
-    const synced = on(syncCompleted, states.synced, ({ event, goto, update }) => {
-      update({ syncedItems: event.itemCount, error: undefined });
-      goto(states.synced);
-    });
-
-    return [
-      enter(async ({ ctx, dispatch, effect }) => {
-        try {
-          const itemCount = await effect('catalogSync', async () => runSyncRequest(ctx.shouldFail));
-          await dispatch(synced, { itemCount });
-        } catch {
-          await dispatch(failed, {
-            message: 'Retry failed. The same FAILED contract still applies.',
-          });
-        }
-      }),
-      failed,
-      synced,
-    ];
-  })
+  .step('retrying', (api) =>
+    requestStep(api, {
+      run: async ({ ctx, effect }) => {
+        const itemCount = await effect('catalogSync', async () => runSyncRequest(ctx.shouldFail));
+        return { itemCount };
+      },
+      success: {
+        event: syncCompleted,
+        target: api.states.synced,
+        handle: ({ event, goto, update }) => {
+          update({ syncedItems: event.itemCount, error: undefined });
+          goto(api.states.synced);
+        },
+      },
+      failure: {
+        event: syncFailed,
+        target: api.states.failed,
+        mapError: () => ({
+          message: 'Retry failed. The same FAILED contract still applies.',
+        }),
+        handle: ({ event, goto, update }) => {
+          update({ error: event.message });
+          goto(api.states.failed);
+        },
+      },
+    }),
+  )
   .step('synced', ({ on, states }) => [
     on('RESET', {}, states.idle, ({ goto, update }) => {
       update({ syncedItems: 0, error: undefined, lastAttempt: undefined });

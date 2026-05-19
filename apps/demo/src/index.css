@@ -306,6 +306,11 @@ pre {
   font-weight: 600;
 }
 
+.badge-live {
+  background: linear-gradient(135deg, rgba(244, 177, 92, 0.95), rgba(223, 95, 87, 0.95));
+  color: #1a1320;
+}
+
 .error {
   margin-bottom: 1rem;
   color: #ff8a9d;
@@ -316,6 +321,60 @@ pre {
   margin-bottom: 1rem;
   color: #8fe0c7;
   font-weight: 600;
+}
+
+.contract-callout {
+  margin: 1.1rem 0 1.35rem;
+  border: 1px solid rgba(111, 140, 194, 0.18);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(13, 21, 36, 0.9);
+}
+
+.contract-callout-interruptible {
+  border-color: rgba(244, 177, 92, 0.3);
+  background: linear-gradient(180deg, rgba(31, 24, 14, 0.9), rgba(13, 21, 36, 0.94));
+}
+
+.contract-callout-blocking {
+  border-color: rgba(110, 187, 170, 0.26);
+  background: linear-gradient(180deg, rgba(13, 33, 29, 0.88), rgba(13, 21, 36, 0.94));
+}
+
+.contract-label {
+  display: inline-block;
+  margin-bottom: 0.55rem;
+  color: #ffbc8f;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.contract-status {
+  margin-top: 0.8rem !important;
+  color: #edf3ff;
+  font-weight: 600;
+}
+
+.contract-detail {
+  margin-top: 0.45rem !important;
+  color: #c7d6f5;
+}
+
+.contract-progress {
+  overflow: hidden;
+  margin-top: 0.8rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  height: 0.5rem;
+}
+
+.contract-progress-bar {
+  transform-origin: left center;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(244, 177, 92, 0.98), rgba(223, 95, 87, 0.98));
 }
 
 .snapshot-grid {

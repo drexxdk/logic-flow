@@ -127,7 +127,7 @@ const syncMachine = setup({
     },
   },
 });`,
-  logicFlowCode: `import { createFlow, defineEvent } from 'logic-flow';
+  logicFlowCode: `import { createFlow, defineEvent, requestStep } from 'logic-flow';
 import { z } from 'zod';
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -168,29 +168,31 @@ async function runSyncRequest(shouldFail: boolean) {
       update({ shouldFail: !ctx.shouldFail });
     }),
   ])
-  .step('syncing', ({ enter, on, states }) => {
-/* @typed */     const failed = on(syncFailed, states.failed, ({ event, goto, update }) => {
-      update({ error: event.message });
-      goto(states.failed);
-    });
-/* @typed */     const synced = on(syncCompleted, states.synced, ({ event, goto, update }) => {
-      update({ syncedItems: event.itemCount, error: undefined });
-      goto(states.synced);
-    });
-
-    return [
-/* @typed */       enter(async ({ ctx, dispatch, effect }) => {
-        try {
-          const itemCount = await effect('catalogSync', async () => runSyncRequest(ctx.shouldFail));
-          await dispatch(synced, { itemCount });
-        } catch {
-          await dispatch(failed, { message: 'Initial sync failed. Toggle failure and retry.' });
-        }
-      }),
-      failed,
-      synced,
-    ];
-  })
+  .step('syncing', (api) =>
+/* @typed */     requestStep(api, {
+      run: async ({ ctx, effect }) => {
+        const itemCount = await effect('catalogSync', async () => runSyncRequest(ctx.shouldFail));
+        return { itemCount };
+      },
+      success: {
+        event: syncCompleted,
+        target: api.states.synced,
+        handle: ({ event, goto, update }) => {
+          update({ syncedItems: event.itemCount, error: undefined });
+          goto(api.states.synced);
+        },
+      },
+      failure: {
+        event: syncFailed,
+        target: api.states.failed,
+        mapError: () => ({ message: 'Initial sync failed. Toggle failure and retry.' }),
+        handle: ({ event, goto, update }) => {
+          update({ error: event.message });
+          goto(api.states.failed);
+        },
+      },
+    }),
+  )
   .step('failed', ({ on, states }) => [
     on('RETRY', {}, states.retrying, ({ goto, update }) => {
       update({ error: undefined, lastAttempt: 'retrying' });
@@ -204,31 +206,33 @@ async function runSyncRequest(shouldFail: boolean) {
       goto(states.idle);
     }),
   ])
-  .step('retrying', ({ enter, on, states }) => {
-/* @typed */     const failed = on(syncFailed, states.failed, ({ event, goto, update }) => {
-      update({ error: event.message });
-      goto(states.failed);
-    });
-/* @typed */     const synced = on(syncCompleted, states.synced, ({ event, goto, update }) => {
-      update({ syncedItems: event.itemCount, error: undefined });
-      goto(states.synced);
-    });
-
-    return [
-      enter(async ({ ctx, dispatch, effect }) => {
-        try {
-          const itemCount = await effect('catalogSync', async () => runSyncRequest(ctx.shouldFail));
-          await dispatch(synced, { itemCount });
-        } catch {
-          await dispatch(failed, {
-            message: 'Retry failed. The same FAILED contract still applies.',
-          });
-        }
-      }),
-      failed,
-      synced,
-    ];
-  })
+  .step('retrying', (api) =>
+    requestStep(api, {
+      run: async ({ ctx, effect }) => {
+        const itemCount = await effect('catalogSync', async () => runSyncRequest(ctx.shouldFail));
+        return { itemCount };
+      },
+      success: {
+        event: syncCompleted,
+        target: api.states.synced,
+        handle: ({ event, goto, update }) => {
+          update({ syncedItems: event.itemCount, error: undefined });
+          goto(api.states.synced);
+        },
+      },
+      failure: {
+        event: syncFailed,
+        target: api.states.failed,
+        mapError: () => ({
+          message: 'Retry failed. The same FAILED contract still applies.',
+        }),
+        handle: ({ event, goto, update }) => {
+          update({ error: event.message });
+          goto(api.states.failed);
+        },
+      },
+    }),
+  )
   .step('synced', ({ on, states }) => [
     on('RESET', {}, states.idle, ({ goto, update }) => {
       update({ syncedItems: 0, error: undefined, lastAttempt: undefined });
@@ -239,8 +243,8 @@ async function runSyncRequest(shouldFail: boolean) {
     }),
   ]);`,
   typedReasons: [
-    '`defineEvent(...)` gives the shared FAILED and SYNCED contracts one reusable source of truth instead of rebuilding inline event objects in each invoke branch.',
-    'The same event definitions are reused directly in both request states, so local handlers and internal dispatches stay aligned without extra glue code.',
-    'The flow code keeps the retry state logic as normal functions while still preserving typed context, events, and transition targets throughout the chain.',
+    '`requestStep(...)` now shows the blocking request path directly: the helper owns the async work and its success or failure events inside one state-local contract.',
+    '`defineEvent(...)` still gives the shared FAILED and SYNCED contracts one reusable source of truth across both request states.',
+    'This is the version to use when callers should await the final request outcome instead of regaining control mid-request.',
   ],
 };

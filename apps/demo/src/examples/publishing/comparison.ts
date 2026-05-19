@@ -29,6 +29,9 @@ const wait = (ms: number, signal?: AbortSignal) =>
     signal?.addEventListener('abort', handleAbort, { once: true });
   });
 
+const publishRequestMs = 2500;
+const publishResultVisibleMs = 3000;
+
 const publishMachine = setup({
   types: {
     context: {} as {
@@ -47,7 +50,7 @@ const publishMachine = setup({
   },
   actors: {
     publishRequest: fromPromise(async ({ signal }) => {
-      await wait(1000, signal);
+      await wait(publishRequestMs, signal);
     }),
   },
 }).createMachine({
@@ -120,7 +123,7 @@ const publishMachine = setup({
     },
     published: {
       after: {
-        1500: {
+        publishResultVisibleMs: {
           target: 'draft',
           actions: assign({ published: false, notice: undefined }),
         },
@@ -159,6 +162,8 @@ const wait = (ms: number, signal?: AbortSignal) =>
 const cancelPublish = defineEvent('CANCEL', {});
 const publishFailed = defineEvent('FAILED', { message: z.string() });
 const publishSucceeded = defineEvent('PUBLISHED', {});
+const publishRequestMs = 2500;
+const publishResultVisibleMs = 3000;
 
 /* @typed */ export const publishingFlow = createFlow({
   name: 'publishing-demo',
@@ -203,7 +208,7 @@ const publishSucceeded = defineEvent('PUBLISHED', {});
 /* @typed */     requestStep(api, {
         run: ({ effect }) =>
           effect('publishRequest', async (signal) => {
-            await wait(1000, signal);
+            await wait(publishRequestMs, signal);
           }),
         cancel: {
           event: cancelPublish,
@@ -234,7 +239,7 @@ const publishSucceeded = defineEvent('PUBLISHED', {});
   )
   .step('published', ({ enter, states }) =>
     enter(states.draft, ({ schedule }) => {
-/* @typed */       schedule(1500, ({ goto, update }) => {
+/* @typed */       schedule(publishResultVisibleMs, ({ goto, update }) => {
         update({ published: false, notice: undefined });
         goto(states.draft);
       });
