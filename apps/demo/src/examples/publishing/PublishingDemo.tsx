@@ -20,8 +20,8 @@ export function PublishingDemo() {
         <p className="mapping-note">
           XState concept -&gt; logic-flow equivalent: guarded transitions from draft to review or
           publish -&gt; a single event handler with normal `if` / `else` branching, then a
-          `requestStep(...)` helper that keeps the async success, failure, and cancel paths local
-          to the publishing state.
+          `requestStep(...)` helper that keeps the async success, failure, and cancel paths local to
+          the publishing state.
         </p>
       </header>
 
