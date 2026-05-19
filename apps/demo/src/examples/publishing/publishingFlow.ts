@@ -1,4 +1,4 @@
-import { createFlow, defineEvent, isFlowCancellationError } from 'logic-flow';
+import { createFlow, defineEvent, requestStep } from 'logic-flow';
 import { z } from 'zod';
 
 const wait = (ms: number, signal?: AbortSignal) =>
@@ -71,33 +71,33 @@ export const publishingFlow = createFlow({
       goto(states.publishing);
     }),
   )
-  .step('publishing', ({ enter, on, states }) => [
-    enter(async ({ dispatch, effect }) => {
-      try {
-        await effect('publishRequest', async (signal) => {
+  .step('publishing', (api) => [
+    ...requestStep(api, {
+      run: ({ effect }) =>
+        effect('publishRequest', async (signal) => {
           await wait(1000, signal);
-        });
-
-        await dispatch(publishSucceeded);
-      } catch (error) {
-        if (isFlowCancellationError(error)) {
-          return;
-        }
-
-        await dispatch(publishFailed, { message: 'Publish request failed.' });
-      }
+        }),
+      success: {
+        event: publishSucceeded,
+        target: api.states.published,
+        handle: ({ goto, update }) => {
+          update({ published: true, error: undefined, notice: 'Publish finished.' });
+          goto(api.states.published);
+        },
+      },
+      failure: {
+        event: publishFailed,
+        target: api.states.draft,
+        mapError: () => ({ message: 'Publish request failed.' }),
+        handle: ({ event, goto, update }) => {
+          update({ error: event.message, notice: undefined });
+          goto(api.states.draft);
+        },
+      },
     }),
-    on(cancelPublish, states.draft, ({ goto, update }) => {
+    api.on(cancelPublish, api.states.draft, ({ goto, update }) => {
       update({ error: undefined, notice: 'Publishing cancelled.' });
-      goto(states.draft);
-    }),
-    on(publishSucceeded, states.published, ({ goto, update }) => {
-      update({ published: true, error: undefined, notice: 'Publish finished.' });
-      goto(states.published);
-    }),
-    on(publishFailed, states.draft, ({ event, goto, update }) => {
-      update({ error: event.message, notice: undefined });
-      goto(states.draft);
+      goto(api.states.draft);
     }),
   ])
   .step('published', ({ enter, states }) =>

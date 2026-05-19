@@ -234,6 +234,8 @@ describe('createFlow', () => {
 
   it('supports requestStep for async request states without losing event inference', async () => {
     const deferred = createDeferred<void>();
+    const saved = defineEvent('SAVED', {});
+    const failed = defineEvent('FAILED', { message: z.string() });
 
     const flow = createFlow({
       name: 'request-step',
@@ -255,7 +257,7 @@ describe('createFlow', () => {
             return {};
           },
           success: {
-            type: 'SAVED',
+            event: saved,
             shape: {},
             target: api.states.done,
             handle: ({ goto, update }) => {
@@ -264,8 +266,7 @@ describe('createFlow', () => {
             },
           },
           failure: {
-            type: 'FAILED',
-            shape: { message: z.string() },
+            event: failed,
             target: api.states.idle,
             mapError: () => ({ message: 'Save failed.' }),
             handle: ({ event, goto, update }) => {
@@ -279,11 +280,16 @@ describe('createFlow', () => {
 
     const instance = flow.createInstance();
     const assertExternalSendTypes = () => {
+      void instance.send(saved);
+      void instance.send(failed, { message: 'typed failure from definition' });
       void instance.send({ type: 'SAVED' });
       void instance.send({ type: 'FAILED', message: 'typed failure' });
 
       // @ts-expect-error FAILED requires its message payload.
       void instance.send({ type: 'FAILED' });
+
+      // @ts-expect-error FAILED still requires its message payload when using a reusable definition.
+      void instance.send(failed);
     };
 
     void assertExternalSendTypes;
@@ -1296,9 +1302,7 @@ describe('createFlow', () => {
             type: 'FAILED',
             shape: { message: z.string() },
             mapError: (error) => {
-              order.push(
-                isFlowCancellationError(error) ? 'cancelled-error' : 'ordinary-error',
-              );
+              order.push(isFlowCancellationError(error) ? 'cancelled-error' : 'ordinary-error');
               return { message: 'failed' };
             },
           },

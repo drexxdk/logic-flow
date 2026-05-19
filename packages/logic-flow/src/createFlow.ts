@@ -335,7 +335,8 @@ interface RequestStepTransitionConfig<
   TType extends string,
   TShape extends EventShape = EmptyEventShape,
 > {
-  type: TType;
+  event?: FlowEventDefinition<TType, TShape>;
+  type?: TType;
   shape?: TShape;
   target?: FlowTransitionInput<TState, readonly TState[]>;
   handle?: FlowHandler<
@@ -1226,8 +1227,28 @@ function isFlowEventDefinition(
 
 const EMPTY_EVENT_SHAPE = {} as EventShape;
 
-function hasShapeFields<TShape extends EventShape>(shape: TShape): boolean {
-  return Object.keys(shape).length > 0;
+function hasEventDefinitionShapeFields(
+  eventDefinition: InternalFlowEventDefinition<string, EventShape>,
+): boolean {
+  return Object.keys(eventDefinition.schema.shape).some((key) => key !== 'type');
+}
+
+function resolveRequestStepEventDefinition<const TType extends string, TShape extends EventShape>(
+  config: Pick<RequestStepTransitionConfig<unknown, FlowEvent, string, TType, TShape>, 'event' | 'type' | 'shape'>,
+): InternalFlowEventDefinition<TType, TShape> {
+  if (config.event) {
+    if (!isFlowEventDefinition(config.event)) {
+      throw new Error('requestStep event definitions must be created with defineEvent(...).');
+    }
+
+    return config.event as InternalFlowEventDefinition<TType, TShape>;
+  }
+
+  if (!config.type) {
+    throw new Error('requestStep requires either an event definition or a type string.');
+  }
+
+  return createInternalEventDefinition(config.type, (config.shape ?? EMPTY_EVENT_SHAPE) as TShape);
 }
 
 function createRequestStepEventRegistration<
@@ -1240,7 +1261,7 @@ function createRequestStepEventRegistration<
   on: IStepRegistrar<TContext, TAllEvents, TState>['on'],
   config: RequestStepTransitionConfig<TContext, TAllEvents, TState, TType, TShape>,
 ): EventRegistration<TState, TType, TShape, readonly TState[]> {
-  const shape = (config.shape ?? EMPTY_EVENT_SHAPE) as TShape;
+  const eventDefinition = resolveRequestStepEventDefinition(config);
   const handler = (config.handle ??
     (({ goto }) => {
       if (config.target) {
@@ -1254,7 +1275,7 @@ function createRequestStepEventRegistration<
   >;
 
   if (!config.target) {
-    return on(createInternalEventDefinition(config.type, shape), handler) as EventRegistration<
+    return on(eventDefinition, handler) as EventRegistration<
       TState,
       TType,
       TShape,
@@ -1273,7 +1294,7 @@ function createRequestStepEventRegistration<
         EventFromShape<TType, TShape>
       >,
     ) => EventRegistration<TState, TType, TShape, readonly TState[]>
-  )(createInternalEventDefinition(config.type, shape), config.target, handler);
+  )(eventDefinition, config.target, handler);
 }
 
 export function requestStep<
@@ -1302,14 +1323,13 @@ export function requestStep<
 ] {
   const success = createRequestStepEventRegistration(api.on, config.success);
   const failure = createRequestStepEventRegistration(api.on, config.failure);
-  const successShape = (config.success.shape ?? EMPTY_EVENT_SHAPE) as TSuccessShape;
 
   return [
     api.enter(async (enterApi) => {
       try {
         const successPayload = await config.run(enterApi);
 
-        if (hasShapeFields(successShape) || typeof successPayload !== 'undefined') {
+        if (hasEventDefinitionShapeFields(success) || typeof successPayload !== 'undefined') {
           await enterApi.dispatch(success, successPayload as EventPayload<TSuccessShape>);
         } else {
           await enterApi.dispatch(success, {} as EventPayload<TSuccessShape>);

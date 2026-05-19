@@ -128,7 +128,7 @@ const publishMachine = setup({
     },
   },
 });`,
-  logicFlowCode: `import { createFlow, defineEvent, isFlowCancellationError } from 'logic-flow';
+  logicFlowCode: `import { createFlow, defineEvent, requestStep } from 'logic-flow';
 import { z } from 'zod';
 
 const wait = (ms: number, signal?: AbortSignal) =>
@@ -201,31 +201,31 @@ const publishSucceeded = defineEvent('PUBLISHED', {});
   )
 /* @typed */   .step('publishing', (api) =>
     [
-/* @typed */       api.enter(async ({ dispatch, effect }) => {
-        try {
-          await effect('publishRequest', async (signal) => {
+/* @typed */       ...requestStep(api, {
+        run: ({ effect }) =>
+          effect('publishRequest', async (signal) => {
             await wait(1000, signal);
-          });
-
-            await dispatch(publishSucceeded);
-        } catch (error) {
-/* @typed */         if (isFlowCancellationError(error)) {
-            return;
-          }
-
-            await dispatch(publishFailed, { message: 'Publish request failed.' });
-        }
+          }),
+        success: {
+          event: publishSucceeded,
+          target: api.states.published,
+          handle: ({ goto, update }) => {
+            update({ published: true, error: undefined, notice: 'Publish finished.' });
+            goto(api.states.published);
+          },
+        },
+        failure: {
+          event: publishFailed,
+          target: api.states.draft,
+          mapError: () => ({ message: 'Publish request failed.' }),
+          handle: ({ event, goto, update }) => {
+            update({ error: event.message, notice: undefined });
+            goto(api.states.draft);
+          },
+        },
       }),
-        api.on(cancelPublish, api.states.draft, ({ goto, update }) => {
+      api.on(cancelPublish, api.states.draft, ({ goto, update }) => {
         update({ error: undefined, notice: 'Publishing cancelled.' });
-        goto(api.states.draft);
-      }),
-  /* @typed */       api.on(publishSucceeded, api.states.published, ({ goto, update }) => {
-        update({ published: true, error: undefined, notice: 'Publish finished.' });
-        goto(api.states.published);
-      }),
-        api.on(publishFailed, api.states.draft, ({ event, goto, update }) => {
-        update({ error: event.message, notice: undefined });
         goto(api.states.draft);
       }),
     ],
@@ -241,6 +241,6 @@ const publishSucceeded = defineEvent('PUBLISHED', {});
   typedReasons: [
     'The logic-flow version still keeps the runtime schema and inferred context type in one place, even after inlining the one-off XState types for fairness.',
     'Normal `if` and `else` branching replaces the guard-array encoding while still narrowing `goto(...)` to the declared submit targets.',
-    'The publishing enter hook shows cooperative cancellation as ordinary TypeScript control flow, with `isFlowCancellationError(...)` separating cancellation from real failures.',
+    '`requestStep(...)` now accepts reusable event definitions, so the async request path stays compact without giving up typed external events or cancellation-safe behavior.',
   ],
 };
