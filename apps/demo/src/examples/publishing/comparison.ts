@@ -4,7 +4,30 @@ export const publishingComparison: CodeExample = {
   title: 'Complete authoring comparison',
   xstateCode: `import { assign, fromPromise, setup } from 'xstate';
 
-const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const wait = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      signal?.removeEventListener('abort', handleAbort);
+    };
+
+    const handleAbort = () => {
+      cleanup();
+      reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
+    };
+
+    const timer = window.setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
+
+    signal?.addEventListener('abort', handleAbort, { once: true });
+  });
 
 const publishMachine = setup({
   types: {
@@ -12,17 +35,19 @@ const publishMachine = setup({
       title: string;
       requiresLegalReview: boolean;
       error?: string;
+      notice?: string;
       published: boolean;
     },
     events: {} as
       | { type: 'CHANGE_TITLE'; value: string }
       | { type: 'TOGGLE_LEGAL_REVIEW' }
       | { type: 'SUBMIT' }
-      | { type: 'APPROVE' },
+      | { type: 'APPROVE' }
+      | { type: 'CANCEL' },
   },
   actors: {
-    publishRequest: fromPromise(async () => {
-      await wait(1000);
+    publishRequest: fromPromise(async ({ signal }) => {
+      await wait(1000, signal);
     }),
   },
 }).createMachine({
@@ -39,42 +64,57 @@ const publishMachine = setup({
           actions: assign(({ event }) => ({
             title: event.value,
             error: undefined,
+            notice: undefined,
             published: false,
           })),
         },
         TOGGLE_LEGAL_REVIEW: {
           actions: assign(({ context }) => ({
             requiresLegalReview: !context.requiresLegalReview,
+            notice: undefined,
           })),
         },
         SUBMIT: [
           {
             guard: ({ context }) => context.title.trim().length < 6,
-            actions: assign({ error: 'Title must be at least 6 characters.' }),
+            actions: assign({ error: 'Title must be at least 6 characters.', notice: undefined }),
           },
           {
             guard: ({ context }) => context.requiresLegalReview,
+            actions: assign({ error: undefined, notice: undefined, published: false }),
             target: 'review',
           },
-          { target: 'publishing' },
+          {
+            actions: assign({ error: undefined, notice: undefined, published: false }),
+            target: 'publishing',
+          },
         ],
       },
     },
     review: {
       on: {
-        APPROVE: { target: 'publishing' },
+        APPROVE: {
+          actions: assign({ error: undefined, notice: undefined }),
+          target: 'publishing',
+        },
       },
     },
     publishing: {
+      on: {
+        CANCEL: {
+          actions: assign({ error: undefined, notice: 'Publishing cancelled.' }),
+          target: 'draft',
+        },
+      },
       invoke: {
         src: 'publishRequest',
         onDone: {
           target: 'published',
-          actions: assign({ published: true, error: undefined }),
+          actions: assign({ published: true, error: undefined, notice: 'Publish finished.' }),
         },
         onError: {
           target: 'draft',
-          actions: assign({ error: 'Publish request failed.' }),
+          actions: assign({ error: 'Publish request failed.', notice: undefined }),
         },
       },
     },
@@ -82,16 +122,43 @@ const publishMachine = setup({
       after: {
         1500: {
           target: 'draft',
-          actions: assign({ published: false }),
+          actions: assign({ published: false, notice: undefined }),
         },
       },
     },
   },
 });`,
-  logicFlowCode: `import { createFlow, requestStep } from 'logic-flow';
+  logicFlowCode: `import { createFlow, defineEvent, isFlowCancellationError } from 'logic-flow';
 import { z } from 'zod';
 
-const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const wait = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      signal?.removeEventListener('abort', handleAbort);
+    };
+
+    const handleAbort = () => {
+      cleanup();
+      reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
+    };
+
+    const timer = window.setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
+
+    signal?.addEventListener('abort', handleAbort, { once: true });
+  });
+
+const cancelPublish = defineEvent('CANCEL', {});
+const publishFailed = defineEvent('FAILED', { message: z.string() });
+const publishSucceeded = defineEvent('PUBLISHED', {});
 
 /* @typed */ export const publishingFlow = createFlow({
   name: 'publishing-demo',
@@ -99,6 +166,7 @@ const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve,
     title: z.string(),
     requiresLegalReview: z.boolean(),
     error: z.string().optional(),
+    notice: z.string().optional(),
     published: z.boolean(),
   }),
   states: ['draft', 'review', 'publishing', 'published'] as const,
@@ -111,54 +179,61 @@ const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve,
 })
   .step('draft', ({ on, states }) => [
 /* @typed */     on('CHANGE_TITLE', { value: z.string() }, ({ event, update }) => {
-      update({ title: event.value, error: undefined, published: false });
+      update({ title: event.value, error: undefined, notice: undefined, published: false });
     }),
     on('TOGGLE_LEGAL_REVIEW', {}, ({ ctx, update }) => {
-      update({ requiresLegalReview: !ctx.requiresLegalReview });
+      update({ requiresLegalReview: !ctx.requiresLegalReview, notice: undefined });
     }),
 /* @typed */     on('SUBMIT', {}, [states.review, states.publishing], ({ ctx, goto, update }) => {
       if (ctx.title.trim().length < 6) {
-        update({ error: 'Title must be at least 6 characters.' });
+        update({ error: 'Title must be at least 6 characters.', notice: undefined });
       } else {
+        update({ error: undefined, notice: undefined, published: false });
         goto(ctx.requiresLegalReview ? states.review : states.publishing);
       }
     }),
   ])
   .step('review', ({ on, states }) =>
-    on('APPROVE', {}, states.publishing, ({ goto }) => {
+    on('APPROVE', {}, states.publishing, ({ goto, update }) => {
+      update({ error: undefined, notice: undefined });
       goto(states.publishing);
     }),
   )
 /* @typed */   .step('publishing', (api) =>
-    requestStep(api, {
-/* @typed */       run: ({ effect }) =>
-        effect('publishRequest', async () => {
-          await wait(1000);
-        }),
-/* @typed */       success: {
-        type: 'PUBLISHED',
-        target: api.states.published,
-        handle: ({ goto, update }) => {
-          update({ published: true, error: undefined });
-          goto(api.states.published);
-        },
-      },
-/* @typed */       failure: {
-        type: 'FAILED',
-        shape: { message: z.string() },
-        target: api.states.draft,
-        mapError: () => ({ message: 'Publish request failed.' }),
-        handle: ({ event, goto, update }) => {
-          update({ error: event.message });
-          goto(api.states.draft);
-        },
-      },
-    }),
+    [
+/* @typed */       api.enter(async ({ dispatch, effect }) => {
+        try {
+          await effect('publishRequest', async (signal) => {
+            await wait(1000, signal);
+          });
+
+            await dispatch(publishSucceeded);
+        } catch (error) {
+/* @typed */         if (isFlowCancellationError(error)) {
+            return;
+          }
+
+            await dispatch(publishFailed, { message: 'Publish request failed.' });
+        }
+      }),
+        api.on(cancelPublish, api.states.draft, ({ goto, update }) => {
+        update({ error: undefined, notice: 'Publishing cancelled.' });
+        goto(api.states.draft);
+      }),
+  /* @typed */       api.on(publishSucceeded, api.states.published, ({ goto, update }) => {
+        update({ published: true, error: undefined, notice: 'Publish finished.' });
+        goto(api.states.published);
+      }),
+        api.on(publishFailed, api.states.draft, ({ event, goto, update }) => {
+        update({ error: event.message, notice: undefined });
+        goto(api.states.draft);
+      }),
+    ],
   )
   .step('published', ({ enter, states }) =>
     enter(states.draft, ({ schedule }) => {
 /* @typed */       schedule(1500, ({ goto, update }) => {
-        update({ published: false });
+        update({ published: false, notice: undefined });
         goto(states.draft);
       });
     }),
@@ -166,6 +241,6 @@ const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve,
   typedReasons: [
     'The logic-flow version still keeps the runtime schema and inferred context type in one place, even after inlining the one-off XState types for fairness.',
     'Normal `if` and `else` branching replaces the guard-array encoding while still narrowing `goto(...)` to the declared submit targets.',
-    '`requestStep(...)` keeps the async success and failure contracts local to the request state instead of scattering them between actor setup and invoke callbacks.',
+    'The publishing enter hook shows cooperative cancellation as ordinary TypeScript control flow, with `isFlowCancellationError(...)` separating cancellation from real failures.',
   ],
 };

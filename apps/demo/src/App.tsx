@@ -48,7 +48,7 @@ export default function App() {
           <h2>Still too narrow for full XState replacement</h2>
           <ul className="overview-list">
             <li>Child flows or actor-style composition</li>
-            <li>Exit hooks and richer cancellation semantics</li>
+            <li>Richer cancellation primitives beyond cooperative effect cancellation</li>
             <li>Hierarchical, history, or parallel states</li>
             <li>Persistence, restore APIs, and dedicated devtools</li>
           </ul>

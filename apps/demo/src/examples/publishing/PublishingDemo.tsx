@@ -14,13 +14,13 @@ export function PublishingDemo() {
         <span className="eyebrow">Demo 2</span>
         <h2>Publishing flow</h2>
         <p>
-          Shows plain if/else branching where submit can route to review or publish without encoded
-          guard arrays.
+          Shows plain if/else branching plus a cancellable publish request that cooperates with the
+          runtime abort signal.
         </p>
         <p className="mapping-note">
           XState concept -&gt; logic-flow equivalent: guarded transitions from draft to review or
-          publish -&gt; a single event handler with normal `if` / `else` branching and typed
-          `goto(...)` targets.
+          publish -&gt; a single event handler with normal `if` / `else` branching, then an enter
+          hook that catches real failures while ignoring cooperative cancellation.
         </p>
       </header>
 
@@ -32,6 +32,9 @@ export function PublishingDemo() {
         </button>
         <button onClick={() => send({ type: 'APPROVE' })} disabled={snapshot.state !== 'review'}>
           Approve review
+        </button>
+        <button onClick={() => send({ type: 'CANCEL' })} disabled={snapshot.state !== 'publishing'}>
+          Cancel publish
         </button>
         <button
           onClick={() => send({ type: 'TOGGLE_LEGAL_REVIEW' })}
@@ -56,6 +59,7 @@ export function PublishingDemo() {
       </div>
 
       {snapshot.context.error ? <p className="error">{snapshot.context.error}</p> : null}
+      {snapshot.context.notice ? <p className="notice">{snapshot.context.notice}</p> : null}
 
       <div className="snapshot-grid">
         <SnapshotBlock title="context" value={snapshot.context} />

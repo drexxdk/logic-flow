@@ -312,6 +312,12 @@ pre {
   font-weight: 600;
 }
 
+.notice {
+  margin-bottom: 1rem;
+  color: #8fe0c7;
+  font-weight: 600;
+}
+
 .snapshot-grid {
   display: grid;
   gap: 1rem;
