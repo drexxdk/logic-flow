@@ -25,10 +25,10 @@ interface FlowTransitionDescriptor<TState extends string> {
 }
 
 export interface FlowSnapshot<TContext, TState extends string, TEvent extends FlowEvent> {
-  state: TState;
-  context: TContext;
-  lastEvent?: TEvent;
-  pendingEffects: string[];
+  readonly state: TState;
+  readonly context: Readonly<TContext>;
+  readonly lastEvent?: Readonly<TEvent>;
+  readonly pendingEffects: readonly string[];
 }
 
 export interface FlowInstanceOptions {
@@ -477,7 +477,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   }
 
   public getSnapshot(): FlowSnapshot<TContext, TState, TEvent> {
-    return this.snapshot;
+    return this.createPublicSnapshot();
   }
 
   public subscribe(
@@ -488,7 +488,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     }
 
     this.listeners.add(listener);
-    listener(this.snapshot);
+  listener(this.createPublicSnapshot());
 
     return () => {
       this.listeners.delete(listener);
@@ -497,11 +497,11 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
 
   public async start(): Promise<FlowSnapshot<TContext, TState, TEvent>> {
     if (this.isDestroyed) {
-      return this.snapshot;
+      return this.createPublicSnapshot();
     }
 
     if (this.hasStarted) {
-      return this.snapshot;
+      return this.createPublicSnapshot();
     }
 
     if (this.startPromise) {
@@ -511,7 +511,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     this.startPromise = (async () => {
       await this.runEnterHandlers(undefined);
       this.hasStarted = true;
-      return this.snapshot;
+      return this.createPublicSnapshot();
     })();
 
     try {
@@ -660,7 +660,19 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
       return;
     }
 
-    this.listeners.forEach((listener) => listener(this.snapshot));
+    const publicSnapshot = this.createPublicSnapshot();
+    this.listeners.forEach((listener) => listener(publicSnapshot));
+  }
+
+  private createPublicSnapshot(): FlowSnapshot<TContext, TState, TEvent> {
+    return deepFreeze({
+      state: this.snapshot.state,
+      context: cloneValue(this.snapshot.context),
+      pendingEffects: [...this.snapshot.pendingEffects],
+      ...(this.snapshot.lastEvent
+        ? { lastEvent: cloneValue(this.snapshot.lastEvent) }
+        : {}),
+    });
   }
 
   private clearTimers(): void {
@@ -979,6 +991,34 @@ function createStateRefs<TState extends string>(states: readonly TState[]): Flow
   return Object.freeze(
     Object.fromEntries(states.map((state) => [state, state])) as FlowStateRefs<TState>,
   );
+}
+
+function cloneValue<TValue>(value: TValue): TValue {
+  if (Array.isArray(value)) {
+    return value.map((entry) => cloneValue(entry)) as TValue;
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, cloneValue(entry)]),
+    ) as TValue;
+  }
+
+  return value;
+}
+
+function deepFreeze<TValue>(value: TValue): TValue {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) {
+    return value;
+  }
+
+  Object.freeze(value);
+
+  Object.values(value).forEach((entry) => {
+    deepFreeze(entry);
+  });
+
+  return value;
 }
 
 function createEventSchema<const TType extends string, TShape extends EventShape>(

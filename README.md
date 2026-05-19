@@ -25,6 +25,7 @@ The first version currently includes:
 - async effects with pending-effect tracking
 - delayed transitions via `schedule(...)`
 - instance lifecycle control through `start()`, `subscribe(...)`, and `destroy()`
+- frozen snapshot reads through `getSnapshot()` and `subscribe(...)`
 - subscriptions and snapshots for UI integration
 
 This is intentionally narrow. It is a proof of concept for the authoring model, not a complete replacement for advanced statechart features.

@@ -131,8 +131,8 @@ const syncMachine = setup({
 import { z } from 'zod';
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
-const syncFailed = defineEvent('FAILED', { message: z.string() });
-const syncCompleted = defineEvent('SYNCED', { itemCount: z.number().int().nonnegative() });
+/* @typed */ const syncFailed = defineEvent('FAILED', { message: z.string() });
+/* @typed */ const syncCompleted = defineEvent('SYNCED', { itemCount: z.number().int().nonnegative() });
 
 async function runSyncRequest(shouldFail: boolean) {
   await wait(900);
@@ -144,7 +144,7 @@ async function runSyncRequest(shouldFail: boolean) {
   return 3;
 }
 
-export const syncFlow = createFlow({
+/* @typed */ export const syncFlow = createFlow({
   name: 'sync-demo',
   context: z.object({
     syncedItems: z.number(),
@@ -169,17 +169,17 @@ export const syncFlow = createFlow({
     }),
   ])
   .step('syncing', ({ enter, on, states }) => {
-    const failed = on(syncFailed, states.failed, ({ event, goto, update }) => {
+/* @typed */     const failed = on(syncFailed, states.failed, ({ event, goto, update }) => {
       update({ error: event.message });
       goto(states.failed);
     });
-    const synced = on(syncCompleted, states.synced, ({ event, goto, update }) => {
+/* @typed */     const synced = on(syncCompleted, states.synced, ({ event, goto, update }) => {
       update({ syncedItems: event.itemCount, error: undefined });
       goto(states.synced);
     });
 
     return [
-      enter(async ({ ctx, dispatch, effect }) => {
+/* @typed */       enter(async ({ ctx, dispatch, effect }) => {
         try {
           const itemCount = await effect('catalogSync', async () => runSyncRequest(ctx.shouldFail));
           await dispatch(synced, { itemCount });
@@ -205,11 +205,11 @@ export const syncFlow = createFlow({
     }),
   ])
   .step('retrying', ({ enter, on, states }) => {
-    const failed = on(syncFailed, states.failed, ({ event, goto, update }) => {
+/* @typed */     const failed = on(syncFailed, states.failed, ({ event, goto, update }) => {
       update({ error: event.message });
       goto(states.failed);
     });
-    const synced = on(syncCompleted, states.synced, ({ event, goto, update }) => {
+/* @typed */     const synced = on(syncCompleted, states.synced, ({ event, goto, update }) => {
       update({ syncedItems: event.itemCount, error: undefined });
       goto(states.synced);
     });
@@ -238,7 +238,6 @@ export const syncFlow = createFlow({
       update({ shouldFail: !ctx.shouldFail });
     }),
   ]);`,
-  typedLineNumbers: [4, 5, 30, 39, 43, 49, 77, 87],
   typedReasons: [
     '`defineEvent(...)` gives the shared FAILED and SYNCED contracts one reusable source of truth instead of rebuilding inline event objects in each invoke branch.',
     'The same event definitions are reused directly in both request states, so local handlers and internal dispatches stay aligned without extra glue code.',

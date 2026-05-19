@@ -19,6 +19,7 @@
     "eslint": "^9.0.0"
   },
   "scripts": {
-    "lint": "eslint \"index.js\""
+    "lint": "eslint \"index.js\" \"test/**/*.js\"",
+    "test": "node test/terminal-goto.test.js"
   }
 }

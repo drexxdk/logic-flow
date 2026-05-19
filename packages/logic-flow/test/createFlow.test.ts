@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import * as logicFlow from '../src';
 import { createFlow, defineEvent, requestStep } from '../src';
+import { useFlow } from '../src/react';
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -101,6 +102,75 @@ describe('createFlow', () => {
     expect(instance.getSnapshot().pendingEffects).toEqual([]);
     expect(instance.getSnapshot().state).toBe('done');
     expect(instance.getSnapshot().context.done).toBe(true);
+  });
+
+  it('returns frozen snapshot copies so external mutation cannot bypass runtime state', async () => {
+    const flow = createFlow({
+      name: 'snapshot-safety',
+      context: z.object({
+        draft: z.object({ count: z.number() }),
+      }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: {
+        draft: { count: 0 },
+      },
+    }).step('idle', ({ on }) => [
+      on('INC', {}, ({ ctx, update }) => {
+        update({ draft: { count: ctx.draft.count + 1 } });
+      }),
+    ]);
+
+    const instance = flow.createInstance();
+    const snapshot = instance.getSnapshot();
+
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(snapshot.context)).toBe(true);
+    expect(Object.isFrozen(snapshot.context.draft)).toBe(true);
+    expect(Object.isFrozen(snapshot.pendingEffects)).toBe(true);
+
+    expect(() => {
+      (snapshot.context as { draft: { count: number } }).draft.count = 99;
+    }).toThrow(TypeError);
+
+    await instance.dispatch({ type: 'INC' });
+
+    expect(instance.getSnapshot().context).toEqual({ draft: { count: 1 } });
+  });
+
+  it('delivers frozen snapshot copies to subscribers', async () => {
+    const flow = createFlow({
+      name: 'subscriber-snapshot-safety',
+      context: z.object({ count: z.number() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { count: 0 },
+    }).step('idle', ({ on }) => [
+      on('INC', {}, ({ ctx, update }) => {
+        update({ count: ctx.count + 1 });
+      }),
+    ]);
+
+    const instance = flow.createInstance();
+    const receivedSnapshots: Array<ReturnType<typeof instance.getSnapshot>> = [];
+
+    const unsubscribe = instance.subscribe((snapshot) => {
+      receivedSnapshots.push(snapshot);
+    });
+
+    await instance.dispatch({ type: 'INC' });
+    unsubscribe();
+
+    expect(receivedSnapshots).toHaveLength(3);
+    expect(receivedSnapshots[0]).not.toBe(receivedSnapshots[1]);
+    expect(receivedSnapshots[1]).not.toBe(instance.getSnapshot());
+    expect(Object.isFrozen(receivedSnapshots[1])).toBe(true);
+
+    expect(() => {
+      (receivedSnapshots[1]!.context as { count: number }).count = 99;
+    }).toThrow(TypeError);
+
+    expect(instance.getSnapshot().context.count).toBe(1);
   });
 
   it('supports delayed transitions from enter handlers', async () => {
@@ -317,6 +387,37 @@ describe('createFlow', () => {
       state: 'done',
       context: { itemCount: 2, error: undefined },
     });
+  });
+
+  it('types useFlow send like the core instance send surface', () => {
+    const synced = defineEvent('SYNCED', { itemCount: z.number().int().nonnegative() });
+
+    const flow = createFlow({
+      name: 'react-send-types',
+      context: z.object({ itemCount: z.number() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { itemCount: 0 },
+    }).step('idle', ({ on }) => [
+      on(synced, ({ event, update }) => {
+        update({ itemCount: event.itemCount });
+      }),
+    ]);
+
+    const assertUseFlowSendTypes = () => {
+      const { send } = useFlow(flow);
+
+      void send({ type: 'SYNCED', itemCount: 2 });
+      void send(synced, { itemCount: 2 });
+
+      // @ts-expect-error SYNCED requires its payload object.
+      void send(synced);
+
+      // @ts-expect-error UNKNOWN is not part of the flow event union.
+      void send({ type: 'UNKNOWN' });
+    };
+
+    void assertUseFlowSendTypes;
   });
 
   it('transitions immediately when goto is called', async () => {

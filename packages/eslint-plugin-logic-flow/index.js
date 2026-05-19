@@ -1,3 +1,97 @@
+function isFunctionNode(node) {
+  return (
+    node?.type === 'ArrowFunctionExpression' ||
+    node?.type === 'FunctionExpression' ||
+    node?.type === 'FunctionDeclaration'
+  );
+}
+
+function findEnclosingFunction(node) {
+  let current = node.parent;
+
+  while (current) {
+    if (isFunctionNode(current)) {
+      return current;
+    }
+
+    current = current.parent;
+  }
+
+  return undefined;
+}
+
+function objectPatternDefinesName(pattern, name) {
+  return pattern.properties.some((property) => {
+    if (property.type !== 'Property') {
+      return false;
+    }
+
+    if (property.value.type === 'Identifier' && property.value.name === name) {
+      return true;
+    }
+
+    return property.key.type === 'Identifier' && property.key.name === name;
+  });
+}
+
+function isFlowCallback(functionNode) {
+  if (!functionNode.parent) {
+    return false;
+  }
+
+  if (
+    functionNode.parent.type === 'CallExpression' &&
+    functionNode.parent.arguments.includes(functionNode) &&
+    functionNode.parent.callee.type === 'Identifier'
+  ) {
+    return functionNode.parent.callee.name === 'on' || functionNode.parent.callee.name === 'enter';
+  }
+
+  if (functionNode.parent.type !== 'Property') {
+    return false;
+  }
+
+  const propertyName =
+    functionNode.parent.key.type === 'Identifier' ? functionNode.parent.key.name : undefined;
+
+  if (propertyName !== 'handle' && propertyName !== 'run') {
+    return false;
+  }
+
+  let current = functionNode.parent.parent;
+
+  while (current) {
+    if (current.type === 'CallExpression' && current.callee.type === 'Identifier') {
+      return current.callee.name === 'requestStep';
+    }
+
+    current = current.parent;
+  }
+
+  return false;
+}
+
+function isTrackedTerminalIdentifier(node) {
+  if (node.type !== 'Identifier') {
+    return false;
+  }
+
+  if (node.name !== 'goto' && node.name !== 'dispatch') {
+    return false;
+  }
+
+  const enclosingFunction = findEnclosingFunction(node);
+
+  if (!enclosingFunction || !isFlowCallback(enclosingFunction)) {
+    return false;
+  }
+
+  return enclosingFunction.params.some(
+    (parameter) =>
+      parameter.type === 'ObjectPattern' && objectPatternDefinesName(parameter, node.name),
+  );
+}
+
 const terminalGotoRule = {
   meta: {
     type: 'problem',
@@ -24,11 +118,7 @@ const terminalGotoRule = {
           return;
         }
 
-        if (terminalCall.callee.type !== 'Identifier') {
-          return;
-        }
-
-        if (terminalCall.callee.name !== 'goto' && terminalCall.callee.name !== 'dispatch') {
+        if (!isTrackedTerminalIdentifier(terminalCall.callee)) {
           return;
         }
 

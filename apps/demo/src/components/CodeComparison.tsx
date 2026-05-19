@@ -6,7 +6,6 @@ export interface CodeExample {
   readonly title: string;
   readonly xstateCode: string;
   readonly logicFlowCode: string;
-  readonly typedLineNumbers: readonly number[];
   readonly typedReasons: readonly string[];
 }
 
@@ -30,10 +29,34 @@ const codeTheme = {
   },
 };
 
+const typedLineMarker = '/* @typed */ ';
+
+function extractTypedCode(rawCode: string): {
+  code: string;
+  typedLineNumbers: number[];
+} {
+  const typedLineNumbers: number[] = [];
+  const code = rawCode
+    .split('\n')
+    .map((line, index) => {
+      if (!line.includes(typedLineMarker)) {
+        return line;
+      }
+
+      typedLineNumbers.push(index + 1);
+
+      return line.replace(typedLineMarker, '');
+    })
+    .join('\n');
+
+  return { code, typedLineNumbers };
+}
+
 SyntaxHighlighter.registerLanguage('tsx', tsx);
 
 export function CodeComparison({ example }: CodeComparisonProps) {
-  const typedLines = new Set(example.typedLineNumbers);
+  const { code, typedLineNumbers } = extractTypedCode(example.logicFlowCode);
+  const typedLines = new Set(typedLineNumbers);
 
   return (
     <section className="comparison-block" aria-label={`${example.title} code comparison`}>
@@ -82,7 +105,7 @@ export function CodeComparison({ example }: CodeComparisonProps) {
                   : 'comparison-code-line',
               })}
             >
-              {example.logicFlowCode}
+              {code}
             </SyntaxHighlighter>
           </div>
           <ul className="typed-advantages-list">

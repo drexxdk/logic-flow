@@ -135,6 +135,8 @@ If the active event handler rejects, later queued external events still continue
 - `start()` runs the initial state's `enter(...)` hooks
 - `destroy()` stops the instance from doing further work
 
+Snapshot reads through `getSnapshot()` and `subscribe(...)` are exposed as frozen copies. Consumers can inspect them safely, but runtime state still only changes through handler APIs such as `update(...)`, `goto(...)`, and `dispatch(...)`.
+
 ### `start()` runs once per instance
 
 Calling `start()` multiple times on the same instance does not replay the initial enter lifecycle.

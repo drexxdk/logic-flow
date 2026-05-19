@@ -93,9 +93,9 @@ import { z } from 'zod';
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-export const publishingFlow = createFlow({
+/* @typed */ export const publishingFlow = createFlow({
   name: 'publishing-demo',
-  context: z.object({
+/* @typed */   context: z.object({
     title: z.string(),
     requiresLegalReview: z.boolean(),
     error: z.string().optional(),
@@ -110,13 +110,13 @@ export const publishingFlow = createFlow({
   },
 })
   .step('draft', ({ on, states }) => [
-    on('CHANGE_TITLE', { value: z.string() }, ({ event, update }) => {
+/* @typed */     on('CHANGE_TITLE', { value: z.string() }, ({ event, update }) => {
       update({ title: event.value, error: undefined, published: false });
     }),
     on('TOGGLE_LEGAL_REVIEW', {}, ({ ctx, update }) => {
       update({ requiresLegalReview: !ctx.requiresLegalReview });
     }),
-    on('SUBMIT', {}, [states.review, states.publishing], ({ ctx, goto, update }) => {
+/* @typed */     on('SUBMIT', {}, [states.review, states.publishing], ({ ctx, goto, update }) => {
       if (ctx.title.trim().length < 6) {
         update({ error: 'Title must be at least 6 characters.' });
       } else {
@@ -129,13 +129,13 @@ export const publishingFlow = createFlow({
       goto(states.publishing);
     }),
   )
-  .step('publishing', (api) =>
+/* @typed */   .step('publishing', (api) =>
     requestStep(api, {
-      run: ({ effect }) =>
+/* @typed */       run: ({ effect }) =>
         effect('publishRequest', async () => {
           await wait(1000);
         }),
-      success: {
+/* @typed */       success: {
         type: 'PUBLISHED',
         target: api.states.published,
         handle: ({ goto, update }) => {
@@ -143,7 +143,7 @@ export const publishingFlow = createFlow({
           goto(api.states.published);
         },
       },
-      failure: {
+/* @typed */       failure: {
         type: 'FAILED',
         shape: { message: z.string() },
         target: api.states.draft,
@@ -157,13 +157,12 @@ export const publishingFlow = createFlow({
   )
   .step('published', ({ enter, states }) =>
     enter(states.draft, ({ schedule }) => {
-      schedule(1500, ({ goto, update }) => {
+/* @typed */       schedule(1500, ({ goto, update }) => {
         update({ published: false });
         goto(states.draft);
       });
     }),
   );`,
-  typedLineNumbers: [7, 20, 26, 34, 40, 48, 55, 66],
   typedReasons: [
     'The logic-flow version still keeps the runtime schema and inferred context type in one place, even after inlining the one-off XState types for fairness.',
     'Normal `if` and `else` branching replaces the guard-array encoding while still narrowing `goto(...)` to the declared submit targets.',

@@ -4,7 +4,7 @@ ESLint rules for projects using `logic-flow`.
 
 ## Rules
 
-- `logic-flow/terminal-goto`: reports meaningful statements after `goto(...)` in the same block.
+- `logic-flow/terminal-goto`: reports meaningful statements after terminal flow operations such as `goto(...)` and `await dispatch(...)` inside supported `logic-flow` callbacks.
 
 ## Usage
 

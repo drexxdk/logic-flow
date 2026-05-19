@@ -115,7 +115,7 @@ import { z } from 'zod';
 const MAX_HEADING_LENGTH = 24;
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-export const renameFlow = createFlow({
+/* @typed */ export const renameFlow = createFlow({
   name: 'rename-demo',
   context: z.object({
     modalOpen: z.boolean(),
@@ -134,13 +134,13 @@ export const renameFlow = createFlow({
   },
 })
   .step('closed', ({ on, states }) =>
-    on('OPEN', {}, states.editing, ({ ctx, goto, update }) => {
+/* @typed */     on('OPEN', {}, states.editing, ({ ctx, goto, update }) => {
       update({ modalOpen: true, heading: ctx.savedHeading, error: undefined });
       goto(states.editing);
     }),
   )
   .step('editing', ({ on, states }) => [
-    on('CHANGE', { value: z.string() }, ({ ctx, event, update }) => {
+/* @typed */     on('CHANGE', { value: z.string() }, ({ ctx, event, update }) => {
       const normalizedValue = event.value.trim().toLowerCase();
       let error: string | undefined;
 
@@ -161,18 +161,18 @@ export const renameFlow = createFlow({
       update({ modalOpen: false, error: undefined });
       goto(states.closed);
     }),
-    on('SAVE', {}, states.saving, ({ ctx, goto }) => {
+/* @typed */     on('SAVE', {}, states.saving, ({ ctx, goto }) => {
       if (!ctx.error && ctx.heading.trim().length > 0) {
         goto(states.saving);
       }
     }),
   ])
   .step('saving', ({ enter, on, states }) => {
-    const failed = on('FAILED', { message: z.string() }, states.editing, ({ event, goto, update }) => {
+/* @typed */     const failed = on('FAILED', { message: z.string() }, states.editing, ({ event, goto, update }) => {
       update({ error: event.message });
       goto(states.editing);
     });
-    const saved = on('SAVED', { heading: z.string() }, states.success, ({ event, goto, update }) => {
+/* @typed */     const saved = on('SAVED', { heading: z.string() }, states.success, ({ event, goto, update }) => {
       update({
         savedHeading: event.heading,
         heading: event.heading,
@@ -183,7 +183,7 @@ export const renameFlow = createFlow({
     });
 
     return [
-      enter(async ({ ctx, dispatch, effect }) => {
+/* @typed */       enter(async ({ ctx, dispatch, effect }) => {
         try {
           await effect('renameRequest', async () => {
             await wait(800);
@@ -198,13 +198,12 @@ export const renameFlow = createFlow({
     ];
   })
   .step('success', ({ enter, states }) =>
-    enter(states.closed, ({ schedule }) => {
+/* @typed */     enter(states.closed, ({ schedule }) => {
       schedule(1200, ({ goto }) => {
         goto(states.closed);
       });
     }),
   );`,
-  typedLineNumbers: [7, 23, 45, 51, 66, 72, 86, 101],
   typedReasons: [
     'The flow keeps the runtime schema and the inferred context type in the same declaration, instead of maintaining a separate type-only context shape.',
     'Event payloads are declared next to each handler instead of being predeclared in a global event union before the machine definition.',

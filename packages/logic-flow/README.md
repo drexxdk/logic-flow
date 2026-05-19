@@ -124,8 +124,10 @@ The current runtime guarantees:
 
 - `goto(...)` is terminal inside a handler or `enter(...)` hook
 - internal flow-api `dispatch(...)` is also terminal within the current execution
+- `getSnapshot()` and `subscribe(...)` expose frozen snapshot copies so consumers cannot mutate runtime state out of band
+- external `instance.dispatch(...)` and `instance.send(...)` calls queue in order while work is active, and later queued events still settle even after an earlier failure
 - `start()` runs initial enter handlers once per instance
-- `destroy()` clears timers and prevents stale async completions from mutating the snapshot
+- `destroy()` clears timers, prevents stale async completions from mutating the snapshot, and settles queued calls that never started
 - `schedule(...)` work is tied to the current state execution
 
 See the workspace [README.md](../../README.md) and [docs/execution-semantics.md](../../docs/execution-semantics.md) for the broader project status and detailed behavior rules.
