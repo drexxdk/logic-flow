@@ -167,15 +167,27 @@ This prevents stale work from updating state after the owning UI or runtime has 
 
 `effect(...)` work belongs to the currently active state execution.
 
+The task receives an `AbortSignal` so it can cooperate with cancellation directly:
+
+```ts
+enter(async ({ effect }) => {
+  await effect('publishRequest', async (signal) => {
+    signal.throwIfAborted?.();
+    await wait(1000);
+  });
+});
+```
+
 That means when the flow leaves a state:
 
+- the owned effect signals are aborted
 - that state's pending effect names are removed from the snapshot immediately
 - the old async task may still settle later, but resumed flow logic from that old execution becomes inert
 - stale `update(...)`, `goto(...)`, `dispatch(...)`, `schedule(...)`, and nested `effect(...)` calls from the old execution no longer affect the live state
 
 This same invalidation happens on self-transitions and `destroy()`.
 
-The current runtime does not yet provide abort signals to the underlying async task itself. State ownership prevents stale writes and stale control flow after a transition, but the task function still runs until its own promise settles.
+This is cooperative cancellation: if the task ignores the signal, the promise may still run until it settles, but stale flow logic from that execution still becomes inert after the state is left.
 
 ## Scheduled Work Ownership
 

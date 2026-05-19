@@ -25,6 +25,7 @@ The first version currently includes:
 - state lifecycle hooks through `enter(...)` and `exit(...)`
 - async effects with pending-effect tracking
 - state-scoped effect ownership so stale async completions become inert after a transition
+- cooperative `AbortSignal` support inside `effect(...)` tasks
 - delayed transitions via `schedule(...)`
 - instance lifecycle control through `start()`, `subscribe(...)`, and `destroy()`
 - frozen snapshot reads through `getSnapshot()` and `subscribe(...)`

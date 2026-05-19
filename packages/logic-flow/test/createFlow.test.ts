@@ -1086,6 +1086,7 @@ describe('createFlow', () => {
     vi.useFakeTimers();
 
     const deferred = createDeferred<void>();
+    let capturedSignal: AbortSignal | undefined;
 
     const flow = createFlow({
       name: 'effect-transition-clear',
@@ -1100,7 +1101,10 @@ describe('createFlow', () => {
             goto(states.done);
           });
 
-          await effect('persist', () => deferred.promise);
+          await effect('persist', (signal) => {
+            capturedSignal = signal;
+            return deferred.promise;
+          });
           update({ staleWriteApplied: true });
         }),
       ])
@@ -1117,6 +1121,7 @@ describe('createFlow', () => {
 
     expect(instance.getSnapshot().state).toBe('done');
     expect(instance.getSnapshot().pendingEffects).toEqual([]);
+  expect(capturedSignal?.aborted).toBe(true);
 
     deferred.resolve();
     await startPromise;
@@ -1131,6 +1136,8 @@ describe('createFlow', () => {
 
     const firstDeferred = createDeferred<void>();
     const secondDeferred = createDeferred<void>();
+    let firstSignal: AbortSignal | undefined;
+    let secondSignal: AbortSignal | undefined;
     let enterCount = 0;
 
     const flow = createFlow({
@@ -1144,9 +1151,15 @@ describe('createFlow', () => {
         enterCount += 1;
         update({ currentRun: enterCount });
 
-        await effect('persist', () =>
-          enterCount === 1 ? firstDeferred.promise : secondDeferred.promise,
-        );
+        await effect('persist', (signal) => {
+          if (enterCount === 1) {
+            firstSignal = signal;
+            return firstDeferred.promise;
+          }
+
+          secondSignal = signal;
+          return secondDeferred.promise;
+        });
 
         update({ staleWriteApplied: true });
       }),
@@ -1169,6 +1182,8 @@ describe('createFlow', () => {
 
     expect(instance.getSnapshot().pendingEffects).toEqual(['persist']);
     expect(instance.getSnapshot().context.currentRun).toBe(2);
+  expect(firstSignal?.aborted).toBe(true);
+  expect(secondSignal?.aborted).toBe(false);
 
     firstDeferred.resolve();
     await startPromise;
@@ -1183,6 +1198,44 @@ describe('createFlow', () => {
     expect(instance.getSnapshot().pendingEffects).toEqual([]);
 
     vi.useRealTimers();
+  });
+
+  it('aborts active effects when an instance is destroyed', async () => {
+    const deferred = createDeferred<void>();
+    let capturedSignal: AbortSignal | undefined;
+
+    const flow = createFlow({
+      name: 'effect-destroy-abort',
+      context: z.object({ ready: z.boolean() }),
+      states: ['idle'] as const,
+      initial: 'idle',
+      initialContext: { ready: false },
+    }).step('idle', ({ enter }) => [
+      enter(async ({ effect, update }) => {
+        await effect('persist', (signal) => {
+          capturedSignal = signal;
+          return deferred.promise;
+        });
+        update({ ready: true });
+      }),
+    ]);
+
+    const instance = flow.createInstance();
+    const startPromise = instance.start();
+
+    await Promise.resolve();
+
+    expect(instance.getSnapshot().pendingEffects).toEqual(['persist']);
+
+    instance.destroy();
+
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(instance.getSnapshot().pendingEffects).toEqual([]);
+
+    deferred.resolve();
+    await startPromise;
+
+    expect(instance.getSnapshot().context.ready).toBe(false);
   });
 
   it('rejects dispatch when an event handler throws', async () => {

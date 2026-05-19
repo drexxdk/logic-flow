@@ -14,6 +14,7 @@ Completed so far:
 - added support for typed handlers, `update(...)`, `goto(...)`, `effect(...)`, and `schedule(...)`
 - added state lifecycle support through `enter(...)` and synchronous `exit(...)`
 - made `effect(...)` ownership state-scoped so pending effects clear on state exit and stale async completions become inert
+- added cooperative `AbortSignal` support to `effect(...)` tasks
 - hardened builder validation for duplicate states, duplicate events in a step, and missing step definitions
 - made `destroy()` terminal and inert so stale async completions and later external dispatches stop mutating state
 - made `start()` idempotent per instance
@@ -70,7 +71,7 @@ Not implemented yet:
 
 - a polished higher-level authoring API on top of the current low-level builder
 - reusable packaged helpers for common async and form patterns
-- abort signals or a richer cancellation API for long-running effects
+- richer cancellation primitives beyond cooperative `AbortSignal` support
 - child flows or nested workflows
 - history states, parallel states, or advanced orchestration features
 - devtools or structured inspection UI

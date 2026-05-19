@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 type Awaitable<T> = T | Promise<T>;
+type FlowEffectTask<TResult> = (signal: AbortSignal) => Awaitable<TResult>;
 export type FlowEvent = { type: string };
 type FlowContextPatch<TContext> = Partial<TContext> | ((context: TContext) => Partial<TContext>);
 type FlowStateNames<TStates extends readonly string[]> = TStates[number];
@@ -51,7 +52,7 @@ interface FlowApi<
     eventDefinition: FlowEventDefinition<TType, TShape>,
     ...args: EventPayloadArgs<TShape>
   ): Promise<void>;
-  effect<TResult>(name: string, task: () => Awaitable<TResult>): Promise<TResult>;
+  effect<TResult>(name: string, task: FlowEffectTask<TResult>): Promise<TResult>;
   schedule(
     ms: number,
     task: (api: FlowEnterApi<TContext, TAllEvents, TState, TGotoState>) => Awaitable<void>,
@@ -199,6 +200,13 @@ interface IExecutionContext {
 interface IActiveEffect {
   readonly name: string;
   readonly ownerStateExecutionId: number;
+  readonly abortController: AbortController;
+}
+
+class FlowExecutionCancelledError extends Error {
+  public constructor(reason: 'effect') {
+    super(`The current flow execution was cancelled after ${reason}(...).`);
+  }
 }
 
 interface IQueuedDispatch<TEvent> {
@@ -737,6 +745,10 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
   private invalidateCurrentStateExecution(): void {
     const previousStateExecutionId = this.stateExecutionId;
 
+    this.activeEffects
+      .filter((effect) => effect.ownerStateExecutionId === previousStateExecutionId)
+      .forEach((effect) => effect.abortController.abort());
+
     this.stateExecutionId += 1;
 
     const nextActiveEffects = this.activeEffects.filter(
@@ -754,21 +766,37 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
 
   private async runEffect<TResult>(
     name: string,
-    task: () => Awaitable<TResult>,
+    task: FlowEffectTask<TResult>,
     ownerStateExecutionId: number,
   ): Promise<TResult> {
     if (this.isDestroyed) {
       return undefined as TResult;
     }
 
-    const effectEntry: IActiveEffect = { name, ownerStateExecutionId };
+    const effectEntry: IActiveEffect = {
+      name,
+      ownerStateExecutionId,
+      abortController: new AbortController(),
+    };
 
     this.activeEffects.push(effectEntry);
     this.syncPendingEffects();
     this.notify();
 
     try {
-      return await task();
+      const result = await task(effectEntry.abortController.signal);
+
+      if (ownerStateExecutionId !== this.stateExecutionId || this.isDestroyed) {
+        throw new FlowExecutionCancelledError('effect');
+      }
+
+      return result;
+    } catch (error) {
+      if (ownerStateExecutionId !== this.stateExecutionId || this.isDestroyed) {
+        throw new FlowExecutionCancelledError('effect');
+      }
+
+      throw error;
     } finally {
       const effectIndex = this.activeEffects.indexOf(effectEntry);
 
@@ -894,7 +922,7 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
         throw new FlowTransitionSignal(state);
       },
       dispatch,
-      effect: <TResult>(name: string, task: () => Awaitable<TResult>) => {
+      effect: <TResult>(name: string, task: FlowEffectTask<TResult>) => {
         if (!assertActive()) {
           return Promise.resolve(undefined as TResult);
         }
@@ -962,6 +990,10 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     return error instanceof FlowTransitionSignal;
   }
 
+  private isExecutionCancelledError(error: unknown): error is FlowExecutionCancelledError {
+    return error instanceof FlowExecutionCancelledError;
+  }
+
   private async captureTransition<TApi>(
     task: (api: TApi) => Awaitable<void>,
     api: TApi,
@@ -972,6 +1004,10 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     } catch (error) {
       if (this.isTransitionSignal(error)) {
         return error.nextState;
+      }
+
+      if (this.isExecutionCancelledError(error)) {
+        return undefined;
       }
 
       throw error;
