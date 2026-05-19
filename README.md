@@ -121,13 +121,9 @@ The return-value-based step shape is part of that inference story today.
 
 ## Request Helpers
 
-`requestStep(...)` can now consume reusable `defineEvent(...)` definitions for its success, failure, and optional cancel events, which keeps async request helpers compact without giving up typed internal dispatch or reusable external event contracts.
+`requestStep(...)` supports both local inline events and reusable `defineEvent(...)` contracts for success, failure, and optional cancel events. Prefer the inline form unless the same event contract is genuinely reused in more than one place.
 
 ```ts
-const saved = defineEvent('SAVED', {});
-const failed = defineEvent('FAILED', { message: z.string() });
-const cancelled = defineEvent('CANCEL', {});
-
 .step('saving', (api) =>
   requestStep(api, {
     run: async ({ effect }) => {
@@ -136,21 +132,22 @@ const cancelled = defineEvent('CANCEL', {});
       });
     },
     cancel: {
-      event: cancelled,
+      type: 'CANCEL',
       target: api.states.idle,
       handle: ({ goto }) => {
         goto(api.states.idle);
       },
     },
     success: {
-      event: saved,
+      type: 'SAVED',
       target: api.states.done,
       handle: ({ goto }) => {
         goto(api.states.done);
       },
     },
     failure: {
-      event: failed,
+      type: 'FAILED',
+      shape: { message: z.string() },
       target: api.states.idle,
       mapError: () => ({ message: 'Save failed.' }),
       handle: ({ event, goto, update }) => {
@@ -165,6 +162,8 @@ const cancelled = defineEvent('CANCEL', {});
 Cooperative cancellation still stays out of the failure path. If `run(...)` ends because the active execution was cancelled, `requestStep(...)` skips `mapError(...)` and does not dispatch the failure event.
 
 When `cancel` is present, that cancel event can also transition the flow out of the request state while the request work is still active.
+
+Use `defineEvent(...)` when those same `SAVED`, `FAILED`, or `CANCEL` contracts are shared across multiple steps or need to be dispatched from outside the local helper scope.
 
 When you want to immediately run the initial enter lifecycle, you can create an instance with:
 

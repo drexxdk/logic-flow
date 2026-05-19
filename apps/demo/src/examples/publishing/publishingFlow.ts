@@ -1,4 +1,4 @@
-import { createFlow, defineEvent, requestStep } from 'logic-flow';
+import { createFlow, requestStep } from 'logic-flow';
 import { z } from 'zod';
 
 const wait = (ms: number, signal?: AbortSignal) =>
@@ -26,9 +26,6 @@ const wait = (ms: number, signal?: AbortSignal) =>
     signal?.addEventListener('abort', handleAbort, { once: true });
   });
 
-const cancelPublish = defineEvent('CANCEL', {});
-const publishFailed = defineEvent('FAILED', { message: z.string() });
-const publishSucceeded = defineEvent('PUBLISHED', {});
 export const publishRequestMs = 2500;
 export const publishResultVisibleMs = 3000;
 
@@ -80,7 +77,7 @@ export const publishingFlow = createFlow({
           await wait(publishRequestMs, signal);
         }),
       cancel: {
-        event: cancelPublish,
+        type: 'CANCEL',
         target: api.states.draft,
         handle: ({ goto, update }) => {
           update({ error: undefined, notice: 'Publishing cancelled.' });
@@ -88,7 +85,7 @@ export const publishingFlow = createFlow({
         },
       },
       success: {
-        event: publishSucceeded,
+        type: 'PUBLISHED',
         target: api.states.published,
         handle: ({ goto, update }) => {
           update({ published: true, error: undefined, notice: 'Publish finished.' });
@@ -96,7 +93,8 @@ export const publishingFlow = createFlow({
         },
       },
       failure: {
-        event: publishFailed,
+        type: 'FAILED',
+        shape: { message: z.string() },
         target: api.states.draft,
         mapError: () => ({ message: 'Publish request failed.' }),
         handle: ({ event, goto, update }) => {

@@ -117,7 +117,7 @@ This is deliberate. The package currently favors that explicit return-value shap
 
 ## Helpers
 
-`defineEvent(...)` lets you reuse an event contract across multiple steps or when sending the same event shape from outside the flow.
+`defineEvent(...)` is for reusable event contracts. Prefer inline event definitions by default, and only pull an event out with `defineEvent(...)` when the same contract needs to be reused across multiple steps, helpers, or external callers.
 
 `requestStep(...)` packages the common async request-state pattern of:
 
@@ -125,7 +125,7 @@ This is deliberate. The package currently favors that explicit return-value shap
 - dispatching typed success or failure events
 - keeping the resulting registrations part of the normal step contract
 
-It can use either inline `type` and `shape` fields or reusable `event: defineEvent(...)` definitions for its success, failure, and optional cancel contracts.
+It can use either inline `type` and `shape` fields or reusable `event: defineEvent(...)` definitions for its success, failure, and optional cancel contracts. The default should usually be inline. Reach for `defineEvent(...)` only when the same event contract really is shared.
 
 When you provide `cancel`, `requestStep(...)` also registers that event as part of the same helper and lets that cancel transition run while the request work is still active.
 
@@ -134,12 +134,8 @@ Cooperative cancellation is treated separately from failure. If `config.run(...)
 When a success event has no payload, omit `shape` and let `run(...)` return `void`.
 
 ```ts
-import { createFlow, defineEvent, requestStep } from 'logic-flow';
+import { createFlow, requestStep } from 'logic-flow';
 import { z } from 'zod';
-
-const saved = defineEvent('SAVED', {});
-const failed = defineEvent('FAILED', { message: z.string() });
-const cancelled = defineEvent('CANCEL', {});
 
 const flow = createFlow({
   name: 'save-flow',
@@ -162,7 +158,7 @@ const flow = createFlow({
         });
       },
       cancel: {
-        event: cancelled,
+        type: 'CANCEL',
         target: api.states.idle,
         handle: ({ goto, update }) => {
           update({ error: undefined });
@@ -170,7 +166,7 @@ const flow = createFlow({
         },
       },
       success: {
-        event: saved,
+        type: 'SAVED',
         target: api.states.done,
         handle: ({ goto, update }) => {
           update({ saved: true, error: undefined });
@@ -178,7 +174,8 @@ const flow = createFlow({
         },
       },
       failure: {
-        event: failed,
+        type: 'FAILED',
+        shape: { message: z.string() },
         target: api.states.idle,
         mapError: () => ({ message: 'Save failed.' }),
         handle: ({ event, goto, update }) => {

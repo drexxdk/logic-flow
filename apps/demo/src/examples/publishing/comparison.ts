@@ -131,7 +131,7 @@ const publishMachine = setup({
     },
   },
 });`,
-  logicFlowCode: `import { createFlow, defineEvent, requestStep } from 'logic-flow';
+  logicFlowCode: `import { createFlow, requestStep } from 'logic-flow';
 import { z } from 'zod';
 
 const wait = (ms: number, signal?: AbortSignal) =>
@@ -159,9 +159,6 @@ const wait = (ms: number, signal?: AbortSignal) =>
     signal?.addEventListener('abort', handleAbort, { once: true });
   });
 
-const cancelPublish = defineEvent('CANCEL', {});
-const publishFailed = defineEvent('FAILED', { message: z.string() });
-const publishSucceeded = defineEvent('PUBLISHED', {});
 const publishRequestMs = 2500;
 const publishResultVisibleMs = 3000;
 
@@ -211,7 +208,7 @@ const publishResultVisibleMs = 3000;
             await wait(publishRequestMs, signal);
           }),
         cancel: {
-          event: cancelPublish,
+          type: 'CANCEL',
           target: api.states.draft,
           handle: ({ goto, update }) => {
             update({ error: undefined, notice: 'Publishing cancelled.' });
@@ -219,7 +216,7 @@ const publishResultVisibleMs = 3000;
           },
         },
         success: {
-          event: publishSucceeded,
+          type: 'PUBLISHED',
           target: api.states.published,
           handle: ({ goto, update }) => {
             update({ published: true, error: undefined, notice: 'Publish finished.' });
@@ -227,7 +224,8 @@ const publishResultVisibleMs = 3000;
           },
         },
         failure: {
-          event: publishFailed,
+          type: 'FAILED',
+          shape: { message: z.string() },
           target: api.states.draft,
           mapError: () => ({ message: 'Publish request failed.' }),
           handle: ({ event, goto, update }) => {
