@@ -178,6 +178,8 @@ enter(async ({ effect }) => {
 });
 ```
 
+The runtime also exposes a public cancellation contract through `FlowCancellationError` and `isFlowCancellationError(...)`. That gives helper code a stable way to distinguish cooperative cancellation from ordinary failures when it needs to branch on that reason.
+
 That means when the flow leaves a state:
 
 - the owned effect signals are aborted
@@ -188,6 +190,8 @@ That means when the flow leaves a state:
 This same invalidation happens on self-transitions and `destroy()`.
 
 This is cooperative cancellation: if the task ignores the signal, the promise may still run until it settles, but stale flow logic from that execution still becomes inert after the state is left.
+
+Higher-level helpers can use that contract too. `requestStep(...)` treats cooperative cancellation as cancellation rather than failure, so it does not call `mapError(...)` or dispatch the failure event when `config.run(...)` ends because the active execution was cancelled.
 
 ## Scheduled Work Ownership
 

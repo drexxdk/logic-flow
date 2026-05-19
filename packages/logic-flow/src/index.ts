@@ -1,7 +1,9 @@
 export {
   createFlow,
   defineEvent,
+  FlowCancellationError,
   FlowInstance,
+  isFlowCancellationError,
   requestStep,
   type FlowDefinition,
   type FlowBuilder,

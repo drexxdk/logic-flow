@@ -15,6 +15,7 @@ Completed so far:
 - added state lifecycle support through `enter(...)` and synchronous `exit(...)`
 - made `effect(...)` ownership state-scoped so pending effects clear on state exit and stale async completions become inert
 - added cooperative `AbortSignal` support to `effect(...)` tasks
+- added a public cancellation contract through `FlowCancellationError` and `isFlowCancellationError(...)`
 - hardened builder validation for duplicate states, duplicate events in a step, and missing step definitions
 - made `destroy()` terminal and inert so stale async completions and later external dispatches stop mutating state
 - made `start()` idempotent per instance

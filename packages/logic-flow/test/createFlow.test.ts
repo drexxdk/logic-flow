@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import * as logicFlow from '../src';
-import { createFlow, defineEvent, requestStep } from '../src';
+import {
+  createFlow,
+  defineEvent,
+  FlowCancellationError,
+  isFlowCancellationError,
+  requestStep,
+} from '../src';
 import { useFlow } from '../src/react';
 
 function createDeferred<T>() {
@@ -20,8 +26,25 @@ function createDeferred<T>() {
 describe('createFlow', () => {
   it('exposes only the supported runtime exports from the package entrypoint', () => {
     expect(Object.keys(logicFlow).sort()).toEqual(
-      ['FlowInstance', 'createFlow', 'defineEvent', 'requestStep'].sort(),
+      [
+        'FlowCancellationError',
+        'FlowInstance',
+        'createFlow',
+        'defineEvent',
+        'isFlowCancellationError',
+        'requestStep',
+      ].sort(),
     );
+  });
+
+  it('exposes a public cancellation error contract', () => {
+    const cancellationError = new FlowCancellationError('effect');
+
+    expect(cancellationError.name).toBe('FlowCancellationError');
+    expect(cancellationError.code).toBe('FLOW_CANCELLED');
+    expect(cancellationError.reason).toBe('effect');
+    expect(isFlowCancellationError(cancellationError)).toBe(true);
+    expect(isFlowCancellationError(new Error('other'))).toBe(false);
   });
 
   it('validates event payloads with zod', async () => {
@@ -1121,7 +1144,7 @@ describe('createFlow', () => {
 
     expect(instance.getSnapshot().state).toBe('done');
     expect(instance.getSnapshot().pendingEffects).toEqual([]);
-  expect(capturedSignal?.aborted).toBe(true);
+    expect(capturedSignal?.aborted).toBe(true);
 
     deferred.resolve();
     await startPromise;
@@ -1182,8 +1205,8 @@ describe('createFlow', () => {
 
     expect(instance.getSnapshot().pendingEffects).toEqual(['persist']);
     expect(instance.getSnapshot().context.currentRun).toBe(2);
-  expect(firstSignal?.aborted).toBe(true);
-  expect(secondSignal?.aborted).toBe(false);
+    expect(firstSignal?.aborted).toBe(true);
+    expect(secondSignal?.aborted).toBe(false);
 
     firstDeferred.resolve();
     await startPromise;
@@ -1236,6 +1259,67 @@ describe('createFlow', () => {
     await startPromise;
 
     expect(instance.getSnapshot().context.ready).toBe(false);
+  });
+
+  it('does not treat effect cancellation as a request-step failure', async () => {
+    vi.useFakeTimers();
+
+    const deferred = createDeferred<void>();
+    const order: string[] = [];
+
+    const flow = createFlow({
+      name: 'request-step-cancellation',
+      context: z.object({ status: z.enum(['idle', 'done']) }),
+      states: ['loading', 'done'] as const,
+      initial: 'loading',
+      initialContext: { status: 'idle' },
+    })
+      .step('loading', (api) =>
+        requestStep(api, {
+          run: async ({ effect, schedule }) => {
+            schedule(50, ({ goto }) => {
+              goto(api.states.done);
+            });
+
+            await effect('persist', () => deferred.promise);
+          },
+          success: {
+            type: 'DONE',
+            target: api.states.done,
+            handle: ({ goto, update }) => {
+              order.push('success');
+              update({ status: 'done' });
+              goto(api.states.done);
+            },
+          },
+          failure: {
+            type: 'FAILED',
+            shape: { message: z.string() },
+            mapError: (error) => {
+              order.push(
+                isFlowCancellationError(error) ? 'cancelled-error' : 'ordinary-error',
+              );
+              return { message: 'failed' };
+            },
+          },
+        }),
+      )
+      .step('done');
+
+    const instance = flow.createInstance();
+    const startPromise = instance.start();
+
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(50);
+
+    deferred.resolve();
+    await startPromise;
+
+    expect(order).toEqual([]);
+    expect(instance.getSnapshot().state).toBe('done');
+    expect(instance.getSnapshot().context.status).toBe('idle');
+
+    vi.useRealTimers();
   });
 
   it('rejects dispatch when an event handler throws', async () => {

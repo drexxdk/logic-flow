@@ -203,10 +203,17 @@ interface IActiveEffect {
   readonly abortController: AbortController;
 }
 
-class FlowExecutionCancelledError extends Error {
-  public constructor(reason: 'effect') {
+export class FlowCancellationError extends Error {
+  public readonly code = 'FLOW_CANCELLED';
+
+  public constructor(public readonly reason: 'effect') {
     super(`The current flow execution was cancelled after ${reason}(...).`);
+    this.name = 'FlowCancellationError';
   }
+}
+
+export function isFlowCancellationError(error: unknown): error is FlowCancellationError {
+  return error instanceof FlowCancellationError;
 }
 
 interface IQueuedDispatch<TEvent> {
@@ -787,13 +794,13 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
       const result = await task(effectEntry.abortController.signal);
 
       if (ownerStateExecutionId !== this.stateExecutionId || this.isDestroyed) {
-        throw new FlowExecutionCancelledError('effect');
+        throw new FlowCancellationError('effect');
       }
 
       return result;
     } catch (error) {
       if (ownerStateExecutionId !== this.stateExecutionId || this.isDestroyed) {
-        throw new FlowExecutionCancelledError('effect');
+        throw new FlowCancellationError('effect');
       }
 
       throw error;
@@ -990,8 +997,8 @@ export class FlowInstance<TContext, TEvent extends FlowEvent, TState extends str
     return error instanceof FlowTransitionSignal;
   }
 
-  private isExecutionCancelledError(error: unknown): error is FlowExecutionCancelledError {
-    return error instanceof FlowExecutionCancelledError;
+  private isExecutionCancelledError(error: unknown): error is FlowCancellationError {
+    return isFlowCancellationError(error);
   }
 
   private async captureTransition<TApi>(
@@ -1308,6 +1315,10 @@ export function requestStep<
           await enterApi.dispatch(success, {} as EventPayload<TSuccessShape>);
         }
       } catch (error) {
+        if (isFlowCancellationError(error)) {
+          return;
+        }
+
         const failurePayload = await config.failure.mapError(error, enterApi);
         await enterApi.dispatch(failure, failurePayload);
       }

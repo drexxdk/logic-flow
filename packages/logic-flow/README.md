@@ -12,8 +12,10 @@ Runtime exports:
 
 - `createFlow`
 - `defineEvent`
+- `FlowCancellationError`
 - `requestStep`
 - `FlowInstance`
+- `isFlowCancellationError`
 
 Type exports:
 
@@ -123,6 +125,8 @@ This is deliberate. The package currently favors that explicit return-value shap
 - dispatching typed success or failure events
 - keeping the resulting registrations part of the normal step contract
 
+Cooperative cancellation is treated separately from failure. If `config.run(...)` ends because the active execution was cancelled, `requestStep(...)` does not call `mapError(...)` or dispatch the failure event.
+
 When a success event has no payload, omit `shape` and let `run(...)` return `void`.
 
 ## Runtime Semantics
@@ -137,6 +141,7 @@ The current runtime guarantees:
 - `start()` runs initial enter handlers once per instance
 - `destroy()` clears timers, prevents stale async completions from mutating the snapshot, and settles queued calls that never started
 - `effect(...)` passes an `AbortSignal` to the task and owns that work by active state execution, so leaving the state aborts cooperative tasks, clears pending effect names, and makes stale completions inert
+- `FlowCancellationError` and `isFlowCancellationError(...)` are part of the public contract for cooperative effect cancellation
 - `schedule(...)` work is tied to the current state execution
 
 See the workspace [README.md](../../README.md) and [docs/execution-semantics.md](../../docs/execution-semantics.md) for the broader project status and detailed behavior rules.

@@ -20,6 +20,7 @@ The first version currently includes:
 - a small runtime for creating flows from typed context schemas and step-local events
 - named steps with typed event handlers and lifecycle hooks
 - a `requestStep(...)` helper for async request states that emit typed success and failure events
+- a public cancellation contract through `FlowCancellationError` and `isFlowCancellationError(...)`
 - context updates through explicit `update(...)`
 - state transitions through explicit `goto(...)` with typed `states.*` refs
 - state lifecycle hooks through `enter(...)` and `exit(...)`
